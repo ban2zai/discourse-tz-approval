@@ -13,8 +13,6 @@ module ::TzApproval
   PLUGIN_NAME = "discourse-tz-approval"
 end
 
-require_relative "lib/tz_approval/engine"
-
 after_initialize do
   require_relative "app/controllers/tz_approval/approvals_controller"
 
@@ -83,12 +81,8 @@ after_initialize do
   add_to_serializer(:topic_list_item, :tz_approved) { object.tz_approved? }
 
   # ── Routes ───────────────────────────────────────────────────────────────────
-  TzApproval::Engine.routes.draw do
-    post "/approve"   => "approvals#approve"
-    post "/unapprove" => "approvals#unapprove"
-  end
-
   Discourse::Application.routes.append do
-    mount ::TzApproval::Engine, at: "/tz-approval"
+    post "/tz-approval/approve"   => "tz_approval/approvals#approve"
+    post "/tz-approval/unapprove" => "tz_approval/approvals#unapprove"
   end
 end
