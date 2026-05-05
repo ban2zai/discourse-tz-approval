@@ -83,12 +83,12 @@ after_initialize do
   add_to_serializer(:topic_list_item, :tz_approved) { object.tz_approved? }
 
   # ── Routes ───────────────────────────────────────────────────────────────────
-  Discourse::Application.routes.append do
-    mount ::TzApproval::Engine, at: "/tz-approval"
-  end
-
   TzApproval::Engine.routes.draw do
     post "/approve"   => "approvals#approve"
     post "/unapprove" => "approvals#unapprove"
+  end
+
+  Discourse::Application.routes.append do
+    mount ::TzApproval::Engine, at: "/tz-approval"
   end
 end

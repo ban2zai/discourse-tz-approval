@@ -21,8 +21,10 @@ export default apiInitializer((api) => {
           ✅
           {{#if (eq @outletArgs.model.tz_approved_by_id @outletArgs.model.user_id)}}
             {{i18n "tz_approval.approved_by_author"}}
-          {{else}}
+          {{else if @outletArgs.model.tz_approved_by_username}}
             {{i18n "tz_approval.approved_by" username=@outletArgs.model.tz_approved_by_username}}
+          {{else}}
+            {{i18n "tz_approval.approved_by_author"}}
           {{/if}}
         </div>
       {{/if}}

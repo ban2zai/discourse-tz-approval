@@ -25,14 +25,20 @@ export default apiInitializer((api) => {
 
     async action() {
       const topic = this.topic;
+      const currentUser = api.getCurrentUser();
       const isApproved = topic.tz_approved;
       const endpoint = isApproved
         ? "/tz-approval/unapprove"
         : "/tz-approval/approve";
 
+      const prevUsername = topic.tz_approved_by_username;
+      const prevById = topic.tz_approved_by_id;
+
       topic.set("tz_approved", !isApproved);
       topic.set("can_approve_tz", isApproved);
       topic.set("can_unapprove_tz", !isApproved);
+      topic.set("tz_approved_by_username", isApproved ? null : currentUser?.username);
+      topic.set("tz_approved_by_id", isApproved ? null : currentUser?.id);
 
       try {
         await ajax(endpoint, { type: "POST", data: { topic_id: topic.id } });
@@ -40,6 +46,8 @@ export default apiInitializer((api) => {
         topic.set("tz_approved", isApproved);
         topic.set("can_approve_tz", !isApproved);
         topic.set("can_unapprove_tz", isApproved);
+        topic.set("tz_approved_by_username", prevUsername);
+        topic.set("tz_approved_by_id", prevById);
         popupAjaxError(e);
       }
     },
