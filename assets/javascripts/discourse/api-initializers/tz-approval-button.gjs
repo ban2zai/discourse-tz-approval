@@ -53,6 +53,4 @@ export default apiInitializer((api) => {
     },
   });
 
-  api.addGroupPostSmallActionCode("tz_approved");
-  api.addGroupPostSmallActionCode("tz_unapproved");
 });

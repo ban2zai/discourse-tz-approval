@@ -19,20 +19,6 @@ module TzApproval
         topic.custom_fields["tz_approved_by_id"] = current_user.id
         topic.custom_fields["tz_approved_at"]    = Time.now.utc.iso8601
         topic.save_custom_fields(true)
-
-        post = PostCreator.create!(
-          Discourse.system_user,
-          raw:              I18n.t("tz_approval.approved_action", username: current_user.username),
-          topic_id:         topic.id,
-          post_type:        Post.types[:small_action],
-          action_code:      "tz_approved",
-          skip_validations: true,
-          bypass_bump:      true,
-          custom_fields:    { "tz_approval_post" => true },
-        )
-
-        topic.custom_fields["tz_approval_post_id"] = post.id
-        topic.save_custom_fields(true)
       end
 
       MessageBus.publish("/topic/#{topic.id}", reload_topic: true, refresh_stream: true)
