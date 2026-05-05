@@ -38,6 +38,8 @@ after_initialize do
     def can_approve_tz?(topic)
       return false unless SiteSetting.tz_approval_enabled
       return false if topic.tz_approved?
+      approval_tags = SiteSetting.tz_approval_tags.split("|").map(&:strip)
+      return false if (topic.tags.map(&:name) & approval_tags).empty?
       return true if is_staff?
       allowed = SiteSetting.tz_approval_allowed_groups_map
       return true if allowed.present? && @user&.in_any_groups?(allowed)

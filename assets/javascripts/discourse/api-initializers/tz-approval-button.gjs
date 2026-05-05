@@ -10,14 +10,7 @@ export default apiInitializer((api) => {
     dependentKeys: ["topic.tz_approved", "topic.can_approve_tz", "topic.can_unapprove_tz"],
 
     displayed() {
-      if (!this.siteSettings.tz_approval_enabled) return false;
-      const tags = this.topic.tags || [];
-      const approvalTags = (this.siteSettings.tz_approval_tags || "")
-        .split("|")
-        .map((t) => t.trim())
-        .filter(Boolean);
-      if (!tags.some((t) => approvalTags.includes(t))) return false;
-      return this.topic.can_approve_tz || this.topic.can_unapprove_tz;
+      return !!this.topic.can_approve_tz || !!this.topic.can_unapprove_tz;
     },
 
     translatedLabel() {
