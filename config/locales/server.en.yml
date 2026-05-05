@@ -1,0 +1,4 @@
+en:
+  tz_approval:
+    approved_action: "%{username} approved this TZ"
+    unapproved_action: "%{username} unapproved this TZ"

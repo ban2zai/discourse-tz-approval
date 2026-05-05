@@ -1,0 +1,4 @@
+ru:
+  tz_approval:
+    approved_action: "%{username} одобрил это ТЗ"
+    unapproved_action: "%{username} снял одобрение"

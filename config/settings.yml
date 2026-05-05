@@ -1,0 +1,18 @@
+plugins:
+  tz_approval_enabled:
+    default: true
+    client: true
+
+  tz_approval_tags:
+    type: list
+    default: "тех-задание"
+    client: true
+
+  tz_approval_allowed_groups:
+    type: group_list
+    default: ""
+
+  tz_author_approval_delay:
+    type: integer
+    default: 600
+    min: 0
