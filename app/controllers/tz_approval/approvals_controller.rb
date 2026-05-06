@@ -56,6 +56,7 @@ module TzApproval
         Discourse.system_user,
         raw:              I18n.t("tz_approval.#{translation_key}", username: tz_approval_actor(topic)),
         topic_id:         topic.id,
+        post_type:        Post.types[:small_action],
         skip_validations: true,
         bypass_bump:      true,
       )

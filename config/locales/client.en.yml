@@ -8,3 +8,7 @@ en:
     action_codes:
       tz_approved: "%{username} approved the TZ"
       tz_unapproved: "%{username} unapproved the TZ"
+    search:
+      advanced:
+        statuses:
+          tz_approved: "TZ approved"

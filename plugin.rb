@@ -7,7 +7,14 @@
 # url: https://github.com/ban2zai/discourse-tz-approval
 # enabled_site_setting: tz_approval_enabled
 
-register_svg_icon "clipboard-check"
+%w[
+  circle-check
+  clipboard-check
+  clipboard-list
+  file-signature
+  stamp
+  square-check
+].each { |icon| register_svg_icon icon }
 
 module ::TzApproval
   PLUGIN_NAME = "discourse-tz-approval"
@@ -79,6 +86,30 @@ after_initialize do
   add_to_serializer(:topic_view, :can_unapprove_tz) { scope.can_unapprove_tz?(object.topic) }
 
   add_to_serializer(:topic_list_item, :tz_approved) { object.tz_approved? }
+
+  # ── Search filters ──────────────────────────────────────────────────────────
+  tz_approved_search_filter = lambda do |posts|
+    posts
+      .joins(<<~SQL)
+        INNER JOIN topic_custom_fields tz_approval_approved_cf
+          ON tz_approval_approved_cf.topic_id = topics.id
+         AND tz_approval_approved_cf.name = 'tz_approved'
+         AND tz_approval_approved_cf.value = 't'
+      SQL
+      .where.not(topics: { archetype: Archetype.private_message })
+  end
+
+  register_custom_filter_by_status("tz-approved", &tz_approved_search_filter)
+  register_search_advanced_filter(/status:tz-approved/, &tz_approved_search_filter)
+
+  register_modifier(:topics_filter_options) do |results, _guardian|
+    results << {
+      name: "status:tz-approved",
+      description: I18n.t("tz_approval.filter.description.tz_approved"),
+      type: "text",
+    }
+    results
+  end
 
   # ── Routes ───────────────────────────────────────────────────────────────────
   Discourse::Application.routes.append do

@@ -1,6 +1,10 @@
 import { apiInitializer } from "discourse/lib/api";
+import { helperContext } from "discourse/lib/helpers";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
+
+const DEFAULT_ICON = "file-signature";
+const ICON_REGEXP = /^[a-z0-9-]+$/;
 
 const APPROVAL_FIELDS = [
   "tz_approved",
@@ -10,6 +14,14 @@ const APPROVAL_FIELDS = [
   "can_approve_tz",
   "can_unapprove_tz",
 ];
+
+function safeIcon(icon) {
+  return ICON_REGEXP.test(icon || "") ? icon : DEFAULT_ICON;
+}
+
+function approvalIcon() {
+  return safeIcon(helperContext().siteSettings.tz_approval_icon);
+}
 
 function setModelApprovalState(model, state) {
   if (!model) {
@@ -46,7 +58,9 @@ function syncApprovalState(topic, state) {
 export default apiInitializer((api) => {
   api.registerTopicFooterButton({
     id: "tz-approval",
-    icon: "clipboard-check",
+    icon() {
+      return approvalIcon();
+    },
     priority: 250,
     dependentKeys: ["topic.tz_approved", "topic.can_approve_tz", "topic.can_unapprove_tz"],
 

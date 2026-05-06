@@ -1,5 +1,12 @@
 en:
+  site_settings:
+    tz_approval_light_color: "TZ approval icon and badge color in light theme"
+    tz_approval_dark_color: "TZ approval icon and badge color in dark theme"
+    tz_approval_icon: "TZ approval icon"
   tz_approval:
     topic_author: "Topic author"
     approved_action: "%{username} approved this TZ"
     unapproved_action: "%{username} unapproved this TZ"
+    filter:
+      description:
+        tz_approved: "topics with approved TZ"

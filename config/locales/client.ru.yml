@@ -8,3 +8,7 @@ ru:
     action_codes:
       tz_approved: "%{username} одобрил ТЗ"
       tz_unapproved: "%{username} снял одобрение"
+    search:
+      advanced:
+        statuses:
+          tz_approved: "ТЗ одобрено"

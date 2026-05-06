@@ -16,3 +16,18 @@ plugins:
     type: integer
     default: 600
     min: 0
+
+  tz_approval_light_color:
+    type: string
+    default: "#d9a441"
+    client: true
+
+  tz_approval_dark_color:
+    type: string
+    default: "#d9a441"
+    client: true
+
+  tz_approval_icon:
+    type: icon
+    default: "file-signature"
+    client: true
