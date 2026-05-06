@@ -3,11 +3,12 @@ ru:
     tz_approval:
       approve: "Одобрить ТЗ"
       unapprove: "Снять одобрение"
+      approved: "ТЗ одобрено"
       approved_by: "ТЗ одобрено — %{username}"
       approved_by_author: "ТЗ одобрено — Автор темы"
     action_codes:
-      tz_approved: "%{username} одобрил ТЗ"
-      tz_unapproved: "%{username} снял одобрение"
+      tz_approved: "ТЗ одобрено"
+      tz_unapproved: "Одобрение ТЗ снято"
     search:
       advanced:
         statuses:

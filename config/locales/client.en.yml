@@ -3,11 +3,12 @@ en:
     tz_approval:
       approve: "Approve TZ"
       unapprove: "Unapprove TZ"
+      approved: "TZ approved"
       approved_by: "TZ approved — %{username}"
       approved_by_author: "TZ approved — Topic author"
     action_codes:
-      tz_approved: "%{username} approved the TZ"
-      tz_unapproved: "%{username} unapproved the TZ"
+      tz_approved: "TZ approved"
+      tz_unapproved: "TZ approval removed"
     search:
       advanced:
         statuses:

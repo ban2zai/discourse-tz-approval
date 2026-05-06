@@ -2,6 +2,7 @@ import Component from "@glimmer/component";
 import { htmlSafe } from "@ember/template";
 import { inject as service } from "@ember/service";
 import { apiInitializer } from "discourse/lib/api";
+import UserLink from "discourse/components/user-link";
 import dIcon from "discourse-common/helpers/d-icon";
 import { eq } from "truth-helpers";
 import { i18n } from "discourse-i18n";
@@ -50,9 +51,10 @@ export default apiInitializer((api) => {
         const color = this.approvalColor;
 
         return htmlSafe(`
-          display: flex;
+          display: inline-flex;
           align-items: center;
           gap: 10px;
+          max-width: min(100%, 640px);
           background: color-mix(in srgb, ${color} 12%, transparent);
           color: var(--primary);
           border: 1px solid color-mix(in srgb, ${color} 45%, transparent);
@@ -92,7 +94,14 @@ export default apiInitializer((api) => {
               {{#if (eq this.topic.tz_approved_by_id this.post.user_id)}}
                 {{i18n "tz_approval.approved_by_author"}}
               {{else if this.topic.tz_approved_by_username}}
-                {{i18n "tz_approval.approved_by" username=this.topic.tz_approved_by_username}}
+                {{i18n "tz_approval.approved"}}
+                —
+                <UserLink
+                  @username={{this.topic.tz_approved_by_username}}
+                  style="font-weight: 700; color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px;"
+                >
+                  @{{this.topic.tz_approved_by_username}}
+                </UserLink>
               {{else}}
                 {{i18n "tz_approval.approved_by_author"}}
               {{/if}}
