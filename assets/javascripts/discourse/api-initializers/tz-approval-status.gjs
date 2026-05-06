@@ -51,10 +51,11 @@ export default apiInitializer((api) => {
         const color = this.approvalColor;
 
         return htmlSafe(`
-          display: inline-flex;
+          display: flex;
           align-items: center;
           gap: 10px;
-          max-width: min(100%, 640px);
+          width: calc(100% - 1.5rem);
+          box-sizing: border-box;
           background: color-mix(in srgb, ${color} 12%, transparent);
           color: var(--primary);
           border: 1px solid color-mix(in srgb, ${color} 45%, transparent);
@@ -62,6 +63,8 @@ export default apiInitializer((api) => {
           border-radius: 6px;
           padding: 10px 12px;
           margin-top: 14px;
+          margin-left: .75rem;
+          margin-right: .75rem;
           font-size: 0.95em;
           line-height: 1.35;
         `);
@@ -98,7 +101,7 @@ export default apiInitializer((api) => {
                 —
                 <UserLink
                   @username={{this.topic.tz_approved_by_username}}
-                  style="font-weight: 700; color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px;"
+                  style="font-weight: 700; color: var(--tertiary); text-decoration: none;"
                 >
                   @{{this.topic.tz_approved_by_username}}
                 </UserLink>
