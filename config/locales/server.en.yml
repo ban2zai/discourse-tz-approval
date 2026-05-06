@@ -1,4 +1,5 @@
 en:
   tz_approval:
+    topic_author: "Topic author"
     approved_action: "%{username} approved this TZ"
     unapproved_action: "%{username} unapproved this TZ"

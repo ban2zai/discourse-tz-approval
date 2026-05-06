@@ -7,7 +7,7 @@
 # url: https://github.com/ban2zai/discourse-tz-approval
 # enabled_site_setting: tz_approval_enabled
 
-register_svg_icon "stamp"
+register_svg_icon "clipboard-check"
 
 module ::TzApproval
   PLUGIN_NAME = "discourse-tz-approval"
@@ -58,7 +58,7 @@ after_initialize do
       allowed = SiteSetting.tz_approval_allowed_groups_map
       is_staff? ||
         (allowed.present? && @user&.in_any_groups?(allowed)) ||
-        @user&.id == topic.user_id
+        (@user&.id == topic.user_id && topic.tz_approved_by_id.to_i == @user&.id)
     end
 
     def ensure_can_unapprove_tz!(topic)

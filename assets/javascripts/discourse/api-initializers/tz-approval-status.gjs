@@ -9,52 +9,62 @@ export default apiInitializer((api) => {
     "post-content-cooked-html",
     class TzApprovalPostStatus extends Component {
       static shouldRender(args) {
-        return args.post?.post_number === 1 && args.post?.topic?.tz_approved;
+        return args.post?.post_number === 1;
+      }
+
+      get post() {
+        return this.args.post;
+      }
+
+      get topic() {
+        return this.post?.topic;
       }
 
       <template>
-        <div
-          style="
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: color-mix(in srgb, var(--success-low) 88%, transparent);
-            color: var(--primary);
-            border: 1px solid color-mix(in srgb, var(--success) 45%, transparent);
-            border-left: 4px solid var(--success);
-            border-radius: 6px;
-            padding: 10px 12px;
-            margin-top: 14px;
-            font-size: 0.95em;
-            line-height: 1.35;
-          "
-        >
-          <span
+        {{#if this.topic.tz_approved}}
+          <div
             style="
-              display: inline-flex;
+              display: flex;
               align-items: center;
-              justify-content: center;
-              width: 28px;
-              height: 28px;
-              flex: 0 0 28px;
-              border-radius: 4px;
-              background: var(--success);
-              color: var(--secondary);
+              gap: 10px;
+              background: color-mix(in srgb, var(--success-low) 88%, transparent);
+              color: var(--primary);
+              border: 1px solid color-mix(in srgb, var(--success) 45%, transparent);
+              border-left: 4px solid var(--success);
+              border-radius: 6px;
+              padding: 10px 12px;
+              margin-top: 14px;
+              font-size: 0.95em;
+              line-height: 1.35;
             "
           >
-            {{dIcon "stamp"}}
-          </span>
+            <span
+              style="
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 28px;
+                height: 28px;
+                flex: 0 0 28px;
+                border-radius: 4px;
+                background: var(--success);
+                color: var(--secondary);
+              "
+            >
+              {{dIcon "clipboard-check"}}
+            </span>
 
-          <span style="min-width: 0; font-weight: 600;">
-            {{#if (eq @post.topic.tz_approved_by_id @post.user_id)}}
-              {{i18n "tz_approval.approved_by_author"}}
-            {{else if @post.topic.tz_approved_by_username}}
-              {{i18n "tz_approval.approved_by" username=@post.topic.tz_approved_by_username}}
-            {{else}}
-              {{i18n "tz_approval.approved_by_author"}}
-            {{/if}}
-          </span>
-        </div>
+            <span style="min-width: 0; font-weight: 600;">
+              {{#if (eq this.topic.tz_approved_by_id this.post.user_id)}}
+                {{i18n "tz_approval.approved_by_author"}}
+              {{else if this.topic.tz_approved_by_username}}
+                {{i18n "tz_approval.approved_by" username=this.topic.tz_approved_by_username}}
+              {{else}}
+                {{i18n "tz_approval.approved_by_author"}}
+              {{/if}}
+            </span>
+          </div>
+        {{/if}}
       </template>
     }
   );

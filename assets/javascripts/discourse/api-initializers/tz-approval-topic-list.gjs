@@ -10,7 +10,7 @@ export default apiInitializer((api) => {
           title="ТЗ одобрено"
           style="color: var(--success); display: inline-flex; align-items: center; margin-right: 4px;"
         >
-          {{dIcon "stamp"}}
+          {{dIcon "clipboard-check"}}
         </span>
       {{/if}}
     </template>

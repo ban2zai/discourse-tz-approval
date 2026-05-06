@@ -1,4 +1,5 @@
 ru:
   tz_approval:
+    topic_author: "Автор темы"
     approved_action: "%{username} одобрил это ТЗ"
-    unapproved_action: "%{username} снял одобрение"
+    unapproved_action: "%{username} снял одобрение с этого ТЗ"

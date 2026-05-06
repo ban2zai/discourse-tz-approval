@@ -19,10 +19,11 @@ module TzApproval
         topic.custom_fields["tz_approved_by_id"] = current_user.id
         topic.custom_fields["tz_approved_at"]    = Time.now.utc.iso8601
         topic.save_custom_fields(true)
+        create_tz_approval_status_post(topic, "approved_action")
       end
 
       MessageBus.publish("/topic/#{topic.id}", reload_topic: true, refresh_stream: true)
-      render json: success_json
+      render json: success_json.merge(tz_approval_payload(topic))
     end
 
     def unapprove
@@ -41,10 +42,42 @@ module TzApproval
         topic.custom_fields["tz_approved_at"]       = nil
         topic.custom_fields["tz_approval_post_id"] = nil
         topic.save_custom_fields(true)
+        create_tz_approval_status_post(topic, "unapproved_action")
       end
 
       MessageBus.publish("/topic/#{topic.id}", reload_topic: true, refresh_stream: true)
-      render json: success_json
+      render json: success_json.merge(tz_approval_payload(topic))
+    end
+
+    private
+
+    def create_tz_approval_status_post(topic, translation_key)
+      PostCreator.create!(
+        Discourse.system_user,
+        raw:              I18n.t("tz_approval.#{translation_key}", username: tz_approval_actor(topic)),
+        topic_id:         topic.id,
+        skip_validations: true,
+        bypass_bump:      true,
+      )
+    end
+
+    def tz_approval_actor(topic)
+      if current_user.id == topic.user_id
+        I18n.t("tz_approval.topic_author")
+      else
+        "[@#{current_user.username}](/u/#{current_user.username_lower})"
+      end
+    end
+
+    def tz_approval_payload(topic)
+      {
+        tz_approved:             topic.tz_approved?,
+        tz_approved_by_id:       topic.tz_approved_by_id,
+        tz_approved_at:          topic.tz_approved_at,
+        tz_approved_by_username: User.find_by(id: topic.tz_approved_by_id)&.username,
+        can_approve_tz:          guardian.can_approve_tz?(topic),
+        can_unapprove_tz:        guardian.can_unapprove_tz?(topic),
+      }
     end
   end
 end
