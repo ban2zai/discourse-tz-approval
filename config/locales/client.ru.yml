@@ -7,8 +7,8 @@ ru:
       approved_by: "ТЗ одобрено — %{username}"
       approved_by_author: "ТЗ одобрено — Автор темы"
     action_codes:
-      tz_approved: "ТЗ одобрено"
-      tz_unapproved: "Одобрение ТЗ снято"
+      tz_approved: "ТЗ одобрено %{when}"
+      tz_unapproved: "Одобрение ТЗ снято %{when}"
     search:
       advanced:
         statuses:

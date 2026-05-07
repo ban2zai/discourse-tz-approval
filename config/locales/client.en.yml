@@ -7,8 +7,8 @@ en:
       approved_by: "TZ approved — %{username}"
       approved_by_author: "TZ approved — Topic author"
     action_codes:
-      tz_approved: "TZ approved"
-      tz_unapproved: "TZ approval removed"
+      tz_approved: "TZ approved %{when}"
+      tz_unapproved: "TZ approval removed %{when}"
     search:
       advanced:
         statuses:
