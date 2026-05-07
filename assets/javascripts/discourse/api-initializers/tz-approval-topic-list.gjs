@@ -1,8 +1,10 @@
 import Component from "@glimmer/component";
 import { htmlSafe } from "@ember/template";
-import { inject as service } from "@ember/service";
+import { service } from "@ember/service";
+import { modifier } from "ember-modifier";
 import { apiInitializer } from "discourse/lib/api";
 import dIcon from "discourse-common/helpers/d-icon";
+import { i18n } from "discourse-i18n";
 
 const DEFAULT_ICON = "file-signature";
 const ICON_REGEXP = /^[a-z0-9-]+$/;
@@ -45,17 +47,49 @@ export default apiInitializer((api) => {
           border-radius: 4px;
           background: color-mix(in srgb, ${color} 14%, transparent);
           color: ${color};
-          margin-right: 5px;
         `);
       }
 
+      moveIntoTopicStatuses = modifier((element) => {
+        const move = () => {
+          const statuses = element.closest(".link-top-line")?.querySelector(".topic-statuses");
+
+          if (statuses && element.parentElement !== statuses) {
+            statuses.appendChild(element);
+          }
+        };
+
+        move();
+        const frame = requestAnimationFrame(move);
+
+        return () => {
+          cancelAnimationFrame(frame);
+          element.remove();
+        };
+      });
+
       <template>
         {{#if @outletArgs.topic.tz_approved}}
-          <span title="ТЗ одобрено" style={{this.iconStyle}}>
+          <span
+            class="tz-approval-topic-status topic-status --tz-approved"
+            data-tz-approval-topic-status
+            title={{i18n "tz_approval.approved"}}
+            aria-label={{i18n "tz_approval.approved"}}
+            style={{this.iconStyle}}
+            {{this.moveIntoTopicStatuses}}
+          >
             {{dIcon this.approvalIcon}}
           </span>
         {{/if}}
       </template>
     }
   );
+
+  api.registerValueTransformer("topic-list-item-class", ({ value, context }) => {
+    if (context.topic.tz_approved) {
+      value.push("status-tz-approved");
+    }
+
+    return value;
+  });
 });

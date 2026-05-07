@@ -13,3 +13,4 @@ ru:
       advanced:
         statuses:
           tz_approved: "ТЗ одобрено"
+          tz_unapproved: "ТЗ не одобрено"

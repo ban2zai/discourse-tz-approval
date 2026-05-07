@@ -75,7 +75,9 @@ export default apiInitializer((api) => {
     },
 
     classNames() {
-      return this.topic.tz_approved ? ["btn-success"] : [];
+      return this.topic.tz_approved
+        ? ["tz-approval-footer-button", "btn-success"]
+        : ["tz-approval-footer-button"];
     },
 
     async action() {

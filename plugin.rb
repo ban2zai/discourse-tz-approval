@@ -18,6 +18,25 @@
 
 module ::TzApproval
   PLUGIN_NAME = "discourse-tz-approval"
+
+  def self.approval_tags
+    SiteSetting.tz_approval_tags.to_s.split("|").map(&:strip).reject(&:blank?)
+  end
+
+  def self.topic_has_approval_tag?(topic)
+    (topic.tags.map(&:name) & approval_tags).present?
+  end
+
+  def self.topic_in_approval_category?(topic)
+    category_ids = SiteSetting.tz_approval_categories_map
+    category_ids.blank? || category_ids.include?(topic.category_id)
+  end
+
+  def self.topic_applicable?(topic)
+    SiteSetting.tz_approval_enabled &&
+      topic_has_approval_tag?(topic) &&
+      topic_in_approval_category?(topic)
+  end
 end
 
 after_initialize do
@@ -41,10 +60,8 @@ after_initialize do
   # ── Guardian extension ───────────────────────────────────────────────────────
   module TzApproval::GuardianExtensions
     def can_approve_tz?(topic)
-      return false unless SiteSetting.tz_approval_enabled
+      return false unless TzApproval.topic_applicable?(topic)
       return false if topic.tz_approved?
-      approval_tags = SiteSetting.tz_approval_tags.split("|").map(&:strip)
-      return false if (topic.tags.map(&:name) & approval_tags).empty?
       return true if is_staff?
       allowed = SiteSetting.tz_approval_allowed_groups_map
       return true if allowed.present? && @user&.in_any_groups?(allowed)
@@ -60,7 +77,7 @@ after_initialize do
     end
 
     def can_unapprove_tz?(topic)
-      return false unless SiteSetting.tz_approval_enabled
+      return false unless TzApproval.topic_applicable?(topic)
       return false unless topic.tz_approved?
       allowed = SiteSetting.tz_approval_allowed_groups_map
       is_staff? ||
@@ -88,24 +105,65 @@ after_initialize do
   add_to_serializer(:topic_list_item, :tz_approved) { object.tz_approved? }
 
   # ── Search filters ──────────────────────────────────────────────────────────
+  tz_applicable_search_filter = lambda do |posts|
+    tag_ids = Tag.where(name: TzApproval.approval_tags).pluck(:id)
+    return posts.none if tag_ids.empty?
+
+    scoped_posts =
+      posts.where(<<~SQL, tag_ids)
+        EXISTS (
+          SELECT 1
+          FROM topic_tags
+          WHERE topic_tags.topic_id = topics.id
+            AND topic_tags.tag_id IN (?)
+        )
+      SQL
+
+    category_ids = SiteSetting.tz_approval_categories_map
+    scoped_posts = scoped_posts.where(topics: { category_id: category_ids }) if category_ids.present?
+
+    scoped_posts.where.not(topics: { archetype: Archetype.private_message })
+  end
+
   tz_approved_search_filter = lambda do |posts|
-    posts
+    tz_applicable_search_filter
+      .call(posts)
       .joins(<<~SQL)
         INNER JOIN topic_custom_fields tz_approval_approved_cf
           ON tz_approval_approved_cf.topic_id = topics.id
          AND tz_approval_approved_cf.name = 'tz_approved'
          AND tz_approval_approved_cf.value = 't'
       SQL
-      .where.not(topics: { archetype: Archetype.private_message })
+  end
+
+  tz_unapproved_search_filter = lambda do |posts|
+    tz_applicable_search_filter
+      .call(posts)
+      .where(<<~SQL)
+        NOT EXISTS (
+          SELECT 1
+          FROM topic_custom_fields tz_approval_approved_cf
+          WHERE tz_approval_approved_cf.topic_id = topics.id
+            AND tz_approval_approved_cf.name = 'tz_approved'
+            AND tz_approval_approved_cf.value = 't'
+        )
+      SQL
   end
 
   register_custom_filter_by_status("tz-approved", &tz_approved_search_filter)
+  register_custom_filter_by_status("tz-unapproved", &tz_unapproved_search_filter)
   register_search_advanced_filter(/status:tz-approved/, &tz_approved_search_filter)
+  register_search_advanced_filter(/status:tz-unapproved/, &tz_unapproved_search_filter)
 
   register_modifier(:topics_filter_options) do |results, _guardian|
     results << {
       name: "status:tz-approved",
       description: I18n.t("tz_approval.filter.description.tz_approved"),
+      type: "text",
+    }
+    results << {
+      name: "status:tz-unapproved",
+      description: I18n.t("tz_approval.filter.description.tz_unapproved"),
       type: "text",
     }
     results

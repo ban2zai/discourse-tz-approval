@@ -12,6 +12,10 @@ plugins:
     type: group_list
     default: ""
 
+  tz_approval_categories:
+    type: category_list
+    default: ""
+
   tz_author_approval_delay:
     type: integer
     default: 600

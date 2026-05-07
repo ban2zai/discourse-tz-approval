@@ -1,6 +1,6 @@
 import Component from "@glimmer/component";
 import { htmlSafe } from "@ember/template";
-import { inject as service } from "@ember/service";
+import { service } from "@ember/service";
 import { apiInitializer } from "discourse/lib/api";
 import UserLink from "discourse/components/user-link";
 import dIcon from "discourse-common/helpers/d-icon";
@@ -88,12 +88,16 @@ export default apiInitializer((api) => {
 
       <template>
         {{#if this.topic.tz_approved}}
-          <div style={{this.badgeStyle}}>
-            <span style={{this.iconStyle}}>
+          <div
+            class="tz-approval-post-badge"
+            data-tz-approval-post-badge
+            style={{this.badgeStyle}}
+          >
+            <span class="tz-approval-post-badge__icon" style={{this.iconStyle}}>
               {{dIcon this.approvalIcon}}
             </span>
 
-            <span style="min-width: 0; font-weight: 600;">
+            <span class="tz-approval-post-badge__text" style="min-width: 0; font-weight: 600;">
               {{#if (eq this.topic.tz_approved_by_id this.post.user_id)}}
                 {{i18n "tz_approval.approved_by_author"}}
               {{else if this.topic.tz_approved_by_username}}
@@ -101,7 +105,8 @@ export default apiInitializer((api) => {
                 —
                 <UserLink
                   @username={{this.topic.tz_approved_by_username}}
-                  style="font-weight: 700; color: var(--tertiary); text-decoration: none;"
+                  class="tz-approval-post-badge__user"
+                  style="font-weight: 700; color: var(--d-link-color); text-decoration: none;"
                 >
                   @{{this.topic.tz_approved_by_username}}
                 </UserLink>

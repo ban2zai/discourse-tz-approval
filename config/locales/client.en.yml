@@ -13,3 +13,4 @@ en:
       advanced:
         statuses:
           tz_approved: "TZ approved"
+          tz_unapproved: "TZ unapproved"

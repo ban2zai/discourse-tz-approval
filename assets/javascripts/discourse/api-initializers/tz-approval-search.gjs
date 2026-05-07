@@ -8,8 +8,13 @@ export default apiInitializer((api) => {
         name: i18n("search.advanced.statuses.tz_approved"),
         value: "tz-approved",
       },
+      {
+        name: i18n("search.advanced.statuses.tz_unapproved"),
+        value: "tz-unapproved",
+      },
     ],
   });
 
   api.addSearchSuggestion("status:tz-approved");
+  api.addSearchSuggestion("status:tz-unapproved");
 });

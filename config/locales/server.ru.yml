@@ -3,10 +3,12 @@ ru:
     tz_approval_light_color: "Цвет иконки и плашки одобрения ТЗ в светлой теме"
     tz_approval_dark_color: "Цвет иконки и плашки одобрения ТЗ в тёмной теме"
     tz_approval_icon: "Иконка одобрения ТЗ"
+    tz_approval_categories: "Категории, в которых работает одобрение ТЗ"
   tz_approval:
     topic_author: "Автор темы"
-    approved_action: "%{username} одобрил это ТЗ"
-    unapproved_action: "%{username} снял одобрение с этого ТЗ"
+    approved_action: "%{username} одобрил это ТЗ в %{time}"
+    unapproved_action: "%{username} снял одобрение с этого ТЗ в %{time}"
     filter:
       description:
         tz_approved: "темы с одобренным ТЗ"
+        tz_unapproved: "темы с ТЗ без одобрения"
