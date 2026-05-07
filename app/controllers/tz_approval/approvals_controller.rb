@@ -17,7 +17,7 @@ module TzApproval
         topic.custom_fields["tz_approved_by_id"] = current_user.id
         topic.custom_fields["tz_approved_at"]    = approved_at.iso8601
         topic.save_custom_fields(true)
-        create_tz_approval_status_post(topic, "approved_action", "tz_approved", approved_at)
+        create_tz_approval_status_post(topic, "approved_action", "tz_approved")
       end
 
       MessageBus.publish("/topic/#{topic.id}", reload_topic: true, refresh_stream: true)
@@ -40,7 +40,7 @@ module TzApproval
         topic.custom_fields["tz_approved_at"]       = nil
         topic.custom_fields["tz_approval_post_id"] = nil
         topic.save_custom_fields(true)
-        create_tz_approval_status_post(topic, "unapproved_action", "tz_unapproved", Time.now.utc)
+        create_tz_approval_status_post(topic, "unapproved_action", "tz_unapproved")
       end
 
       MessageBus.publish("/topic/#{topic.id}", reload_topic: true, refresh_stream: true)
@@ -49,13 +49,12 @@ module TzApproval
 
     private
 
-    def create_tz_approval_status_post(topic, translation_key, action_code, acted_at)
+    def create_tz_approval_status_post(topic, translation_key, action_code)
       PostCreator.create!(
         Discourse.system_user,
         raw:              I18n.t(
           "tz_approval.#{translation_key}",
           username: tz_approval_actor(topic),
-          time: format_tz_approval_time(acted_at),
         ),
         topic_id:         topic.id,
         post_type:        Post.types[:small_action],
@@ -71,10 +70,6 @@ module TzApproval
       else
         "@#{current_user.username}"
       end
-    end
-
-    def format_tz_approval_time(time)
-      time.utc.strftime("%Y-%m-%d %H:%M UTC")
     end
 
     def tz_approval_payload(topic)
