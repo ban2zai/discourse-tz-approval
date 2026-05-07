@@ -43,7 +43,7 @@ export default apiInitializer((api) => {
       <template>
         {{#if @outletArgs.topic.tz_approved}}
           <span
-            class="tz-approval-topic-status topic-status --tz-approved"
+            class="tz-approval-topic-status --tz-approved"
             data-tz-approval-topic-status
             title={{i18n "tz_approval.approved"}}
             aria-label={{i18n "tz_approval.approved"}}
