@@ -16,6 +16,8 @@
   square-check
 ].each { |icon| register_svg_icon icon }
 
+register_asset "stylesheets/tz-approval.scss"
+
 module ::TzApproval
   PLUGIN_NAME = "discourse-tz-approval"
 

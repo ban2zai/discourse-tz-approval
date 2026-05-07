@@ -1,0 +1,136 @@
+:root {
+  --tz-approval-color: light-dark(#d9a441, #d9a441);
+}
+
+.tz-approval-topic-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tz-approval-color) 14%, transparent);
+  color: var(--tz-approval-color);
+}
+
+.tz-approval-post-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(100% - 1.5rem);
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--tz-approval-color) 12%, transparent);
+  color: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--tz-approval-color) 45%, transparent);
+  border-left: 4px solid var(--tz-approval-color);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-top: 14px;
+  margin-left: 0.75rem;
+  margin-right: 0.75rem;
+  font-size: 0.95em;
+  line-height: 1.35;
+}
+
+.tz-approval-post-badge__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tz-approval-color) 18%, transparent);
+  color: var(--tz-approval-color);
+}
+
+.tz-approval-post-badge__text {
+  min-width: 0;
+  font-weight: 600;
+}
+
+.tz-approval-post-badge__user {
+  font-weight: 700;
+  color: var(--d-link-color);
+  text-decoration: none;
+}
+
+.tz-approval-small-action-layout {
+  > .topic-avatar {
+    display: none;
+  }
+
+  .small-action-desc {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    align-items: start;
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .small-action-contents {
+    display: block;
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    min-width: 0;
+
+    > a[data-user-card="system"] {
+      display: none;
+    }
+  }
+
+  .small-action-buttons {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    align-self: start;
+  }
+}
+
+.tz-approval-small-action {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 8px;
+  align-items: start;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.tz-approval-small-action__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  color: var(--tz-approval-color);
+}
+
+.tz-approval-small-action__title {
+  min-width: 0;
+  color: var(--primary-medium);
+  line-height: 1.35;
+}
+
+.tz-approval-small-action__time {
+  color: var(--primary-medium);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.tz-approval-small-action__message {
+  grid-column: 2 / 4;
+  min-width: 0;
+  color: var(--primary);
+  line-height: 1.45;
+
+  p {
+    margin: 0;
+  }
+}
