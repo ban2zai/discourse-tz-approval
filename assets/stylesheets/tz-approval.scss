@@ -56,9 +56,10 @@
   text-decoration: none;
 }
 
+.tz-approval-small-action-post,
 .tz-approval-small-action-layout {
   > .topic-avatar {
-    display: none;
+    display: none !important;
   }
 
   .small-action-desc {
@@ -72,14 +73,14 @@
   }
 
   .small-action-contents {
-    display: block;
+    display: block !important;
     grid-column: 1;
     grid-row: 1;
     width: 100%;
     min-width: 0;
 
     > a[data-user-card="system"] {
-      display: none;
+      display: none !important;
     }
   }
 

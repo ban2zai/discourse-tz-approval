@@ -116,7 +116,9 @@ export default apiInitializer((api) => {
   });
 
   api.registerValueTransformer("post-small-action-class", ({ value, context }) => {
-    if (isTzApprovalAction(context.post.action_code)) {
+    const code = context.post?.action_code || context.post?.actionCode || context.code;
+
+    if (isTzApprovalAction(code)) {
       value.push("tz-approval-small-action-post");
     }
 
