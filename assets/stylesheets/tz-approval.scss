@@ -6,11 +6,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
-  flex: 0 0 17px;
+  width: 0.9em;
+  height: 0.9em;
+  flex: 0 0 0.9em;
   border-radius: 4px;
+  margin-right: 0.25em;
   color: var(--tz-approval-color);
+  line-height: inherit;
+  vertical-align: -0.05em;
 }
 
 .tz-approval-post-badge {
@@ -93,7 +96,7 @@
 
 .tz-approval-small-action {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
   column-gap: 10px;
   row-gap: 8px;
@@ -106,8 +109,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 5px;
   color: var(--tz-approval-color);
 }
