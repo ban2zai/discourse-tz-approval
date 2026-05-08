@@ -20,9 +20,14 @@ register_asset "stylesheets/tz-approval.scss"
 
 module ::TzApproval
   PLUGIN_NAME = "discourse-tz-approval"
+  CATEGORY_BINDING_MODE = "category"
 
   def self.approval_tags
     SiteSetting.tz_approval_tags.to_s.split("|").map(&:strip).reject(&:blank?)
+  end
+
+  def self.category_binding_mode?
+    SiteSetting.tz_approval_binding_mode.to_s == CATEGORY_BINDING_MODE
   end
 
   def self.topic_has_approval_tag?(topic)
@@ -31,13 +36,17 @@ module ::TzApproval
 
   def self.topic_in_approval_category?(topic)
     category_ids = SiteSetting.tz_approval_categories_map
-    category_ids.blank? || category_ids.include?(topic.category_id)
+    category_ids.present? && category_ids.include?(topic.category_id)
   end
 
   def self.topic_applicable?(topic)
-    SiteSetting.tz_approval_enabled &&
-      topic_has_approval_tag?(topic) &&
+    return false unless SiteSetting.tz_approval_enabled
+
+    if category_binding_mode?
       topic_in_approval_category?(topic)
+    else
+      topic_has_approval_tag?(topic)
+    end
   end
 end
 
@@ -108,11 +117,20 @@ after_initialize do
 
   # ── Search filters ──────────────────────────────────────────────────────────
   tz_applicable_search_filter = lambda do |posts|
-    tag_ids = Tag.where(name: TzApproval.approval_tags).pluck(:id)
-    return posts.none if tag_ids.empty?
+    return posts.none unless SiteSetting.tz_approval_enabled
 
-    scoped_posts =
-      posts.where(<<~SQL, tag_ids)
+    scoped_posts = posts.where.not(topics: { archetype: Archetype.private_message })
+
+    if TzApproval.category_binding_mode?
+      category_ids = SiteSetting.tz_approval_categories_map
+      return scoped_posts.none if category_ids.blank?
+
+      scoped_posts.where(topics: { category_id: category_ids })
+    else
+      tag_ids = Tag.where(name: TzApproval.approval_tags).pluck(:id)
+      return scoped_posts.none if tag_ids.empty?
+
+      scoped_posts.where(<<~SQL, tag_ids)
         EXISTS (
           SELECT 1
           FROM topic_tags
@@ -120,11 +138,7 @@ after_initialize do
             AND topic_tags.tag_id IN (?)
         )
       SQL
-
-    category_ids = SiteSetting.tz_approval_categories_map
-    scoped_posts = scoped_posts.where(topics: { category_id: category_ids }) if category_ids.present?
-
-    scoped_posts.where.not(topics: { archetype: Archetype.private_message })
+    end
   end
 
   tz_approved_search_filter = lambda do |posts|

@@ -1,9 +1,11 @@
 ru:
   site_settings:
+    tz_approval_binding_mode: "Как включать одобрение ТЗ для тем: по тегу или по категории"
+    tz_approval_tags: "Теги, которые включают одобрение ТЗ в режиме привязки по тегу"
     tz_approval_light_color: "Цвет иконки и плашки одобрения ТЗ в светлой теме"
     tz_approval_dark_color: "Цвет иконки и плашки одобрения ТЗ в тёмной теме"
     tz_approval_icon: "Иконка одобрения ТЗ"
-    tz_approval_categories: "Категории, в которых работает одобрение ТЗ"
+    tz_approval_categories: "Категории, которые включают одобрение ТЗ в режиме привязки по категории"
   tz_approval:
     topic_author: "Автор темы"
     approved_action: "%{username} одобрил это ТЗ"

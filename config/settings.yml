@@ -3,6 +3,14 @@ plugins:
     default: true
     client: true
 
+  tz_approval_binding_mode:
+    type: enum
+    default: "tag"
+    choices:
+      - tag
+      - category
+    client: true
+
   tz_approval_tags:
     type: list
     default: "тех-задание"
