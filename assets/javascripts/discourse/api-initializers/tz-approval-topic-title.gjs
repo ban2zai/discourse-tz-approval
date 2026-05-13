@@ -7,10 +7,34 @@ import { i18n } from "discourse-i18n";
 
 const DEFAULT_ICON = "file-signature";
 const ICON_REGEXP = /^[a-z0-9-]+$/;
-const movedTitleIcons = new Map();
+const insertedTitleIconClones = new Map();
 
 function safeIcon(icon) {
   return ICON_REGEXP.test(icon || "") ? icon : DEFAULT_ICON;
+}
+
+function removeClone(clone) {
+  if (clone?.parentNode) {
+    clone.parentNode.removeChild(clone);
+  }
+}
+
+function syncClone(source, clone) {
+  clone.className = source.className;
+  clone.title = source.title;
+  clone.removeAttribute("hidden");
+
+  if (clone.innerHTML !== source.innerHTML) {
+    clone.innerHTML = source.innerHTML;
+  }
+
+  const ariaLabel = source.getAttribute("aria-label");
+
+  if (ariaLabel) {
+    clone.setAttribute("aria-label", ariaLabel);
+  } else {
+    clone.removeAttribute("aria-label");
+  }
 }
 
 export default apiInitializer((api) => {
@@ -29,21 +53,30 @@ export default apiInitializer((api) => {
 
       moveIntoTopicStatuses = modifier((element, [targetSelector, targetKey]) => {
         let frame = null;
+        let clone = null;
 
         const move = () => {
-          const currentElement = movedTitleIcons.get(targetKey);
+          const statuses = document.querySelector(targetSelector);
 
-          if (currentElement && currentElement !== element && currentElement.isConnected) {
-            element.remove();
+          if (!statuses) {
             return;
           }
 
-          movedTitleIcons.set(targetKey, element);
+          const currentClone = insertedTitleIconClones.get(targetKey);
 
-          const statuses = document.querySelector(targetSelector);
+          if (currentClone && currentClone !== clone) {
+            removeClone(currentClone);
+          }
 
-          if (statuses && element.parentElement !== statuses) {
-            statuses.appendChild(element);
+          if (!clone) {
+            clone = element.cloneNode(true);
+          }
+
+          syncClone(element, clone);
+          insertedTitleIconClones.set(targetKey, clone);
+
+          if (clone.parentElement !== statuses) {
+            statuses.appendChild(clone);
           }
         };
 
@@ -62,11 +95,11 @@ export default apiInitializer((api) => {
           cancelAnimationFrame(frame);
           observer.disconnect();
 
-          if (movedTitleIcons.get(targetKey) === element) {
-            movedTitleIcons.delete(targetKey);
+          if (insertedTitleIconClones.get(targetKey) === clone) {
+            insertedTitleIconClones.delete(targetKey);
           }
 
-          element.remove();
+          removeClone(clone);
         };
       });
 
@@ -76,6 +109,7 @@ export default apiInitializer((api) => {
           data-tz-approval-topic-title-status="main"
           title={{i18n "tz_approval.approved"}}
           aria-label={{i18n "tz_approval.approved"}}
+          hidden
           {{this.moveIntoTopicStatuses "#topic-title h1 .topic-statuses" "main"}}
         >
           {{dIcon this.approvalIcon}}
@@ -86,6 +120,7 @@ export default apiInitializer((api) => {
           data-tz-approval-topic-title-status="header"
           title={{i18n "tz_approval.approved"}}
           aria-label={{i18n "tz_approval.approved"}}
+          hidden
           {{this.moveIntoTopicStatuses "h1.header-title .topic-statuses" "header"}}
         >
           {{dIcon this.approvalIcon}}
