@@ -22,6 +22,8 @@ function syncClone(source, clone) {
   clone.className = source.className;
   clone.title = source.title;
   clone.removeAttribute("hidden");
+  clone.removeAttribute("aria-hidden");
+  clone.style.removeProperty("display");
 
   if (clone.innerHTML !== source.innerHTML) {
     clone.innerHTML = source.innerHTML;
@@ -49,6 +51,9 @@ export default apiInitializer((api) => {
       moveIntoTopicStatuses = modifier((element) => {
         let clone = null;
         let frame = null;
+
+        element.style.display = "none";
+        element.setAttribute("aria-hidden", "true");
 
         const move = () => {
           const statuses = element.closest(".link-top-line")?.querySelector(".topic-statuses");
