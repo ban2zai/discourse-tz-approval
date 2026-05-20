@@ -13,8 +13,8 @@ en:
         title: "TZ status changed"
         approved_notification: "%{display_username} approved your TZ"
         unapproved_notification: "%{display_username} unapproved your TZ"
-        approved_description: "approved your TZ"
-        unapproved_description: "unapproved your TZ"
+        approved_description: "TZ confirmed"
+        unapproved_description: "TZ confirmation removed"
     action_codes:
       tz_approved: "TZ approved"
       tz_unapproved: "TZ approval removed"
