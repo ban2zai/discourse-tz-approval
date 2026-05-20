@@ -17,7 +17,8 @@ module TzApproval
         topic.custom_fields["tz_approved_by_id"] = current_user.id
         topic.custom_fields["tz_approved_at"]    = approved_at.iso8601
         topic.save_custom_fields(true)
-        create_tz_approval_status_post(topic, "approved_action", "tz_approved")
+        post = create_tz_approval_status_post(topic, "approved_action", "tz_approved")
+        notify_topic_author(topic, post, "approved")
       end
 
       MessageBus.publish("/topic/#{topic.id}", reload_topic: true, refresh_stream: true)
@@ -40,7 +41,8 @@ module TzApproval
         topic.custom_fields["tz_approved_at"]       = nil
         topic.custom_fields["tz_approval_post_id"] = nil
         topic.save_custom_fields(true)
-        create_tz_approval_status_post(topic, "unapproved_action", "tz_unapproved")
+        post = create_tz_approval_status_post(topic, "unapproved_action", "tz_unapproved")
+        notify_topic_author(topic, post, "unapproved")
       end
 
       MessageBus.publish("/topic/#{topic.id}", reload_topic: true, refresh_stream: true)
@@ -61,6 +63,32 @@ module TzApproval
         action_code:      action_code,
         skip_validations: true,
         bypass_bump:      true,
+        skip_jobs:        true,
+      )
+    end
+
+    def notify_topic_author(topic, post, action)
+      return if current_user.id == topic.user_id
+
+      topic_author = User.find_by(id: topic.user_id)
+      return if topic_author.blank?
+
+      screener =
+        UserCommScreener.new(acting_user_id: current_user.id, target_user_ids: topic_author.id)
+      return if screener.ignoring_or_muting_actor?(topic_author.id)
+
+      Notification.create!(
+        notification_type: Notification.types[:tz_approval],
+        user_id:           topic_author.id,
+        topic_id:          topic.id,
+        post_number:       post.post_number,
+        data:              {
+          action:           action,
+          message:          "tz_approval.notification.#{action}_notification",
+          title:            "tz_approval.notification.title",
+          display_username: current_user.username,
+          topic_title:      topic.title,
+        }.to_json,
       )
     end
 

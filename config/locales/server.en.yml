@@ -10,6 +10,10 @@ en:
     topic_author: "Topic author"
     approved_action: "%{username} approved this TZ"
     unapproved_action: "%{username} unapproved this TZ"
+    notification:
+      title: "TZ status changed"
+      approved_notification: "%{display_username} approved your TZ"
+      unapproved_notification: "%{display_username} unapproved your TZ"
     filter:
       description:
         tz_approved: "topics with approved TZ"

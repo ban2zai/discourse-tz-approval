@@ -1,11 +1,20 @@
 en:
   js:
+    notifications:
+      alt:
+        tz_approval: "TZ status changed"
     tz_approval:
       approve: "Approve TZ"
       unapprove: "Unapprove TZ"
       approved: "TZ approved"
       approved_by: "TZ approved — %{username}"
       approved_by_author: "TZ approved — Topic author"
+      notification:
+        title: "TZ status changed"
+        approved_notification: "%{display_username} approved your TZ"
+        unapproved_notification: "%{display_username} unapproved your TZ"
+        approved_description: "approved your TZ"
+        unapproved_description: "unapproved your TZ"
     action_codes:
       tz_approved: "TZ approved"
       tz_unapproved: "TZ approval removed"
