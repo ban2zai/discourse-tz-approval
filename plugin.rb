@@ -21,6 +21,7 @@ register_asset "stylesheets/tz-approval.scss"
 module ::TzApproval
   PLUGIN_NAME = "discourse-tz-approval"
   CATEGORY_BINDING_MODE = "category"
+  NOTIFICATION_TYPE_ID = 167
 
   def self.approval_tags
     SiteSetting.tz_approval_tags.to_s.split("|").map(&:strip).reject(&:blank?)
@@ -52,6 +53,8 @@ end
 
 after_initialize do
   require_relative "app/controllers/tz_approval/approvals_controller"
+
+  Notification.types[:tz_approval] = TzApproval::NOTIFICATION_TYPE_ID
 
   # ── Custom fields ────────────────────────────────────────────────────────────
   register_topic_custom_field_type("tz_approved",         :boolean)

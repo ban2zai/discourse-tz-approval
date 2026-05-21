@@ -10,6 +10,10 @@ ru:
     topic_author: "Автор темы"
     approved_action: "%{username} одобрил это ТЗ"
     unapproved_action: "%{username} снял одобрение с этого ТЗ"
+    notification:
+      title: "Статус ТЗ изменен"
+      approved_notification: "%{display_username} одобрил ваше ТЗ"
+      unapproved_notification: "%{display_username} снял одобрение с вашего ТЗ"
     filter:
       description:
         tz_approved: "темы с одобренным ТЗ"

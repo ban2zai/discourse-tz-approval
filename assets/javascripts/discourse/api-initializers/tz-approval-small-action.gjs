@@ -24,6 +24,32 @@ function approvalIcon() {
 }
 
 export default apiInitializer((api) => {
+  api.replaceIcon("notification.tz_approval", approvalIcon());
+
+  if (api.registerNotificationTypeRenderer) {
+    api.registerNotificationTypeRenderer("tz_approval", (NotificationItemBase) => {
+      return class extends NotificationItemBase {
+        get linkTitle() {
+          return i18n("tz_approval.notification.title");
+        }
+
+        get icon() {
+          return approvalIcon();
+        }
+
+        get description() {
+          const action = this.notification.data.action;
+          const descriptionKey =
+            action === "unapproved"
+              ? "tz_approval.notification.unapproved_description"
+              : "tz_approval.notification.approved_description";
+
+          return i18n(descriptionKey);
+        }
+      };
+    });
+  }
+
   api.registerValueTransformer("post-small-action-custom-component", ({ value, context }) => {
     if (!isTzApprovalAction(context.code)) {
       return value;

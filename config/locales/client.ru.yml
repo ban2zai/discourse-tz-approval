@@ -1,11 +1,20 @@
 ru:
   js:
+    notifications:
+      alt:
+        tz_approval: "Статус ТЗ изменен"
     tz_approval:
       approve: "Одобрить ТЗ"
       unapprove: "Снять одобрение"
       approved: "ТЗ одобрено"
       approved_by: "ТЗ одобрено — %{username}"
       approved_by_author: "ТЗ одобрено — Автор темы"
+      notification:
+        title: "Статус ТЗ изменен"
+        approved_notification: "%{display_username} одобрил ваше ТЗ"
+        unapproved_notification: "%{display_username} снял одобрение с вашего ТЗ"
+        approved_description: "ТЗ подтверждено"
+        unapproved_description: "ТЗ снято с подтверждения"
     action_codes:
       tz_approved: "ТЗ одобрено"
       tz_unapproved: "Одобрение ТЗ снято"
