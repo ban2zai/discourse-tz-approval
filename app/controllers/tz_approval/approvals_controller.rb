@@ -54,18 +54,6 @@ module TzApproval
           next
         end
 
-        post_id = topic.custom_fields["tz_approval_post_id"]
-        if post_id.present?
-          post =
-            Post.find_by(
-              id:          post_id.to_i,
-              topic_id:    topic.id,
-              post_type:   Post.types[:small_action],
-              action_code: "tz_approved",
-            )
-          PostDestroyer.new(current_user, post).destroy if post
-        end
-
         topic.custom_fields["tz_approved"]         = nil
         topic.custom_fields["tz_approved_by_id"]   = nil
         topic.custom_fields["tz_approved_at"]       = nil
