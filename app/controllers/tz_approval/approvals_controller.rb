@@ -11,28 +11,58 @@ module TzApproval
       raise Discourse::InvalidAccess.new unless TzApproval.topic_applicable?(topic)
       guardian.ensure_can_approve_tz!(topic)
 
+      approved_topic = nil
+
       ActiveRecord::Base.transaction do
+        topic = Topic.lock.find(topic.id)
+
+        if topic.tz_approved?
+          approved_topic = topic
+          next
+        end
+
         approved_at = Time.now.utc
         topic.custom_fields["tz_approved"]       = true
         topic.custom_fields["tz_approved_by_id"] = current_user.id
         topic.custom_fields["tz_approved_at"]    = approved_at.iso8601
-        topic.save_custom_fields(true)
+
         post = create_tz_approval_status_post(topic, "approved_action", "tz_approved")
+        topic.custom_fields["tz_approval_post_id"] = post.id
+        topic.save_custom_fields(true)
         notify_topic_author(topic, post, "approved")
+
+        approved_topic = topic
       end
 
-      MessageBus.publish("/topic/#{topic.id}", reload_topic: true, refresh_stream: true)
-      render json: success_json.merge(tz_approval_payload(topic))
+      set_current_user_to_watching(approved_topic)
+
+      MessageBus.publish("/topic/#{approved_topic.id}", reload_topic: true, refresh_stream: true)
+      render json: success_json.merge(tz_approval_payload(approved_topic))
     end
 
     def unapprove
       topic = Topic.find(params[:topic_id])
       guardian.ensure_can_unapprove_tz!(topic)
 
+      unapproved_topic = nil
+
       ActiveRecord::Base.transaction do
+        topic = Topic.lock.find(topic.id)
+
+        unless topic.tz_approved?
+          unapproved_topic = topic
+          next
+        end
+
         post_id = topic.custom_fields["tz_approval_post_id"]
         if post_id.present?
-          post = Post.find_by(id: post_id.to_i)
+          post =
+            Post.find_by(
+              id:          post_id.to_i,
+              topic_id:    topic.id,
+              post_type:   Post.types[:small_action],
+              action_code: "tz_approved",
+            )
           PostDestroyer.new(current_user, post).destroy if post
         end
 
@@ -43,13 +73,23 @@ module TzApproval
         topic.save_custom_fields(true)
         post = create_tz_approval_status_post(topic, "unapproved_action", "tz_unapproved")
         notify_topic_author(topic, post, "unapproved")
+
+        unapproved_topic = topic
       end
 
-      MessageBus.publish("/topic/#{topic.id}", reload_topic: true, refresh_stream: true)
-      render json: success_json.merge(tz_approval_payload(topic))
+      MessageBus.publish("/topic/#{unapproved_topic.id}", reload_topic: true, refresh_stream: true)
+      render json: success_json.merge(tz_approval_payload(unapproved_topic))
     end
 
     private
+
+    def set_current_user_to_watching(topic)
+      TopicUser.change(
+        current_user,
+        topic.id,
+        notification_level: TopicUser.notification_levels[:watching],
+      )
+    end
 
     def create_tz_approval_status_post(topic, translation_key, action_code)
       PostCreator.create!(
