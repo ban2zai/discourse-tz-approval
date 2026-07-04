@@ -14,6 +14,8 @@ const ICON_OPTIONS = [
   "circle-check",
   "square-check",
   "stamp",
+  "user-plus",
+  
 ];
 
 const DEFAULT_PROFILE = {
