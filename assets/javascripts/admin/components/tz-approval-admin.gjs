@@ -7,6 +7,15 @@ import { ajax } from "discourse/lib/ajax";
 import { i18n } from "discourse-i18n";
 import { eq } from "truth-helpers";
 
+const ICON_OPTIONS = [
+  "file-signature",
+  "clipboard-check",
+  "clipboard-list",
+  "circle-check",
+  "square-check",
+  "stamp",
+];
+
 const DEFAULT_PROFILE = {
   key: "",
   prefix: "",
@@ -41,8 +50,10 @@ function cloneProfile(profile = DEFAULT_PROFILE) {
 
 export default class TzApprovalAdmin extends Component {
   @tracked categories = [];
+  @tracked categorySearch = "";
   @tracked dirty = false;
   @tracked draft = cloneProfile();
+  @tracked groupSearch = "";
   @tracked groups = [];
   @tracked loadError = null;
   @tracked loading = true;
@@ -51,6 +62,8 @@ export default class TzApprovalAdmin extends Component {
   @tracked saveMessage = null;
   @tracked saving = false;
   @tracked selectedProfileId = null;
+  @tracked tagSearch = "";
+  @tracked tags = [];
 
   constructor() {
     super(...arguments);
@@ -77,8 +90,8 @@ export default class TzApprovalAdmin extends Component {
     return this.saving || !this.dirty;
   }
 
-  get tagList() {
-    return (this.draft.tags || []).join(", ");
+  get iconOptions() {
+    return ICON_OPTIONS;
   }
 
   get categoryOptions() {
@@ -95,10 +108,80 @@ export default class TzApprovalAdmin extends Component {
     }));
   }
 
+  get tagOptions() {
+    const names = new Set([...(this.tags || []), ...(this.draft.tags || [])]);
+
+    return [...names].sort().map((name) => ({
+      id: name,
+      name,
+      selected: this.draft.tags.includes(name),
+    }));
+  }
+
+  get visibleCategoryOptions() {
+    return this.filterOptions(this.categoryOptions, this.categorySearch);
+  }
+
+  get visibleGroupOptions() {
+    return this.filterOptions(this.groupOptions, this.groupSearch);
+  }
+
+  get visibleTagOptions() {
+    return this.filterOptions(this.tagOptions, this.tagSearch);
+  }
+
+  get selectedCategoryOptions() {
+    return this.categoryOptions.filter((category) => category.selected);
+  }
+
+  get selectedGroupOptions() {
+    return this.groupOptions.filter((group) => group.selected);
+  }
+
+  get selectedTagOptions() {
+    return this.tagOptions.filter((tag) => tag.selected);
+  }
+
+  get categorySummary() {
+    return this.selectionSummary(this.selectedCategoryOptions);
+  }
+
+  get groupSummary() {
+    return this.selectionSummary(this.selectedGroupOptions);
+  }
+
+  get tagSummary() {
+    return this.selectionSummary(this.selectedTagOptions);
+  }
+
+  get bindingModeLabel() {
+    return i18n(`tz_approval.admin.binding_modes.${this.draft.binding_mode}`);
+  }
+
+  filterOptions(options, search) {
+    const query = search.trim().toLowerCase();
+    return query
+      ? options.filter((option) => option.name.toLowerCase().includes(query))
+      : options;
+  }
+
+  selectionSummary(options) {
+    if (!options.length) {
+      return i18n("tz_approval.admin.none_selected");
+    }
+
+    if (options.length === 1) {
+      return options[0].name;
+    }
+
+    return i18n("tz_approval.admin.selected_count", { count: options.length });
+  }
+
   applyPayload(data) {
     this.profiles = data.profiles || [];
     this.categories = data.categories || [];
     this.groups = data.groups || [];
+    this.tags = data.tags || [];
 
     const selected =
       this.profiles.find((profile) => profile.id === this.selectedProfileId) ||
@@ -130,6 +213,12 @@ export default class TzApprovalAdmin extends Component {
     this.saveMessage = null;
   }
 
+  resetFilters() {
+    this.categorySearch = "";
+    this.groupSearch = "";
+    this.tagSearch = "";
+  }
+
   @action
   selectProfile(profile) {
     this.selectedProfileId = profile.id;
@@ -137,6 +226,7 @@ export default class TzApprovalAdmin extends Component {
     this.dirty = false;
     this.saveError = null;
     this.saveMessage = null;
+    this.resetFilters();
   }
 
   @action
@@ -146,11 +236,13 @@ export default class TzApprovalAdmin extends Component {
     this.dirty = true;
     this.saveError = null;
     this.saveMessage = null;
+    this.resetFilters();
   }
 
   @action
   updateField(field, event) {
-    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    const value =
+      event.target.type === "checkbox" ? event.target.checked : event.target.value;
     this.draft = { ...this.draft, [field]: value };
     this.markDirty();
   }
@@ -162,14 +254,8 @@ export default class TzApprovalAdmin extends Component {
   }
 
   @action
-  updateTags(event) {
-    const tags = event.target.value
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-
-    this.draft = { ...this.draft, tags };
-    this.markDirty();
+  updateSearch(field, event) {
+    this[field] = event.target.value;
   }
 
   @action
@@ -184,6 +270,20 @@ export default class TzApprovalAdmin extends Component {
     }
 
     this.draft = { ...this.draft, [field]: [...current] };
+    this.markDirty();
+  }
+
+  @action
+  toggleTag(tagName, event) {
+    const current = new Set(this.draft.tags || []);
+
+    if (event.target.checked) {
+      current.add(tagName);
+    } else {
+      current.delete(tagName);
+    }
+
+    this.draft = { ...this.draft, tags: [...current].sort() };
     this.markDirty();
   }
 
@@ -222,7 +322,8 @@ export default class TzApprovalAdmin extends Component {
       this.saveMessage = i18n("tz_approval.admin.save_success");
     } catch (e) {
       this.saveError =
-        e?.jqXHR?.responseJSON?.errors?.join(", ") || i18n("tz_approval.admin.save_error");
+        e?.jqXHR?.responseJSON?.errors?.join(", ") ||
+        i18n("tz_approval.admin.save_error");
     } finally {
       this.saving = false;
     }
@@ -248,7 +349,8 @@ export default class TzApprovalAdmin extends Component {
       this.saveMessage = i18n("tz_approval.admin.delete_success");
     } catch (e) {
       this.saveError =
-        e?.jqXHR?.responseJSON?.errors?.join(", ") || i18n("tz_approval.admin.delete_error");
+        e?.jqXHR?.responseJSON?.errors?.join(", ") ||
+        i18n("tz_approval.admin.delete_error");
     } finally {
       this.saving = false;
     }
@@ -268,12 +370,16 @@ export default class TzApprovalAdmin extends Component {
       </div>
 
       {{#if this.loading}}
-        <p>{{i18n "tz_approval.admin.loading"}}</p>
+        <p class="tz-approval-admin__loading">{{i18n "tz_approval.admin.loading"}}</p>
       {{else if this.loadError}}
         <div class="alert alert-error">{{this.loadError}}</div>
       {{else}}
         <div class="tz-approval-admin__layout">
           <aside class="tz-approval-admin__list">
+            <div class="tz-approval-admin__list-title">
+              {{i18n "tz_approval.admin.profile_list"}}
+            </div>
+
             {{#each this.profiles as |profile|}}
               <button
                 type="button"
@@ -281,171 +387,284 @@ export default class TzApprovalAdmin extends Component {
                 data-selected={{if (eq profile.id this.selectedProfileId) "true" "false"}}
                 {{on "click" (fn this.selectProfile profile)}}
               >
-                <span>{{profile.label}}</span>
-                <code>{{profile.prefix}}</code>
+                <span class="tz-approval-admin__profile-name">{{profile.label}}</span>
+                <span class="tz-approval-admin__profile-meta">
+                  {{profile.prefix}}
+                  -
+                  {{profile.priority}}
+                </span>
               </button>
             {{/each}}
           </aside>
 
           <form class="tz-approval-admin__form" {{on "submit" this.saveProfile}}>
-            <div class="tz-approval-admin__grid">
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.key"}}</span>
-                <input
-                  value={{this.draft.key}}
-                  disabled={{this.isExistingProfile}}
-                  {{on "input" (fn this.updateField "key")}}
-                />
-              </label>
+            <section class="tz-approval-admin__section">
+              <div class="tz-approval-admin__section-head">
+                <h3>{{i18n "tz_approval.admin.sections.main"}}</h3>
+                <label class="tz-approval-admin__switch">
+                  <input
+                    type="checkbox"
+                    checked={{this.draft.enabled}}
+                    disabled={{this.draft.system}}
+                    {{on "change" (fn this.updateField "enabled")}}
+                  />
+                  <span>{{i18n "tz_approval.admin.fields.enabled"}}</span>
+                </label>
+              </div>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.prefix"}}</span>
-                <input
-                  value={{this.draft.prefix}}
-                  disabled={{this.isExistingProfile}}
-                  {{on "input" (fn this.updateField "prefix")}}
-                />
-              </label>
+              <div class="tz-approval-admin__grid">
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.label"}}</span>
+                  <input
+                    value={{this.draft.label}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.label"}}
+                    {{on "input" (fn this.updateField "label")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.label"}}</span>
-                <input
-                  value={{this.draft.label}}
-                  {{on "input" (fn this.updateField "label")}}
-                />
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.priority"}}</span>
+                  <input
+                    type="number"
+                    value={{this.draft.priority}}
+                    {{on "input" (fn this.updateNumberField "priority")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.priority"}}</span>
-                <input
-                  type="number"
-                  value={{this.draft.priority}}
-                  {{on "input" (fn this.updateNumberField "priority")}}
-                />
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.key"}}</span>
+                  <input
+                    value={{this.draft.key}}
+                    disabled={{this.isExistingProfile}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.key"}}
+                    {{on "input" (fn this.updateField "key")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.binding_mode"}}</span>
-                <select
-                  value={{this.draft.binding_mode}}
-                  {{on "change" (fn this.updateField "binding_mode")}}
-                >
-                  <option value="category" selected={{eq this.draft.binding_mode "category"}}>
-                    category
-                  </option>
-                  <option value="tag" selected={{eq this.draft.binding_mode "tag"}}>
-                    tag
-                  </option>
-                </select>
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.prefix"}}</span>
+                  <input
+                    value={{this.draft.prefix}}
+                    disabled={{this.isExistingProfile}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.prefix"}}
+                    {{on "input" (fn this.updateField "prefix")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.icon"}}</span>
-                <input
-                  value={{this.draft.icon}}
-                  {{on "input" (fn this.updateField "icon")}}
-                />
-              </label>
-            </div>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.binding_mode"}}</span>
+                  <select
+                    value={{this.draft.binding_mode}}
+                    {{on "change" (fn this.updateField "binding_mode")}}
+                  >
+                    <option value="category" selected={{eq this.draft.binding_mode "category"}}>
+                      {{i18n "tz_approval.admin.binding_modes.category"}}
+                    </option>
+                    <option value="tag" selected={{eq this.draft.binding_mode "tag"}}>
+                      {{i18n "tz_approval.admin.binding_modes.tag"}}
+                    </option>
+                  </select>
+                </label>
 
-            <label class="tz-approval-admin__checkbox">
-              <input
-                type="checkbox"
-                checked={{this.draft.enabled}}
-                disabled={{this.draft.system}}
-                {{on "change" (fn this.updateField "enabled")}}
-              />
-              <span>{{i18n "tz_approval.admin.fields.enabled"}}</span>
-            </label>
-
-            <label>
-              <span>{{i18n "tz_approval.admin.fields.tags"}}</span>
-              <input
-                value={{this.tagList}}
-                placeholder="tag-one, tag-two"
-                {{on "input" this.updateTags}}
-              />
-            </label>
-
-            <section class="tz-approval-admin__selector">
-              <h3>{{i18n "tz_approval.admin.fields.categories"}}</h3>
-              <div class="tz-approval-admin__options">
-                {{#each this.categoryOptions as |category|}}
-                  <label class="tz-approval-admin__checkbox">
-                    <input
-                      type="checkbox"
-                      checked={{category.selected}}
-                      {{on "change" (fn this.toggleArrayField "category_ids" category.id)}}
-                    />
-                    <span>{{category.name}}</span>
-                  </label>
-                {{/each}}
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.icon"}}</span>
+                  <select value={{this.draft.icon}} {{on "change" (fn this.updateField "icon")}}>
+                    {{#each this.iconOptions as |icon|}}
+                      <option value={{icon}} selected={{eq this.draft.icon icon}}>
+                        {{icon}}
+                      </option>
+                    {{/each}}
+                  </select>
+                </label>
               </div>
             </section>
 
-            <section class="tz-approval-admin__selector">
-              <h3>{{i18n "tz_approval.admin.fields.groups"}}</h3>
-              <div class="tz-approval-admin__options">
-                {{#each this.groupOptions as |group|}}
-                  <label class="tz-approval-admin__checkbox">
+            <section class="tz-approval-admin__section">
+              <div class="tz-approval-admin__section-head">
+                <h3>{{i18n "tz_approval.admin.sections.binding"}}</h3>
+                <span class="tz-approval-admin__mode">{{this.bindingModeLabel}}</span>
+              </div>
+
+              <div class="tz-approval-admin__selectors">
+                <details class="tz-approval-admin__dropdown">
+                  <summary>
+                    <span>{{i18n "tz_approval.admin.fields.categories"}}</span>
+                    <strong>{{this.categorySummary}}</strong>
+                  </summary>
+                  <div class="tz-approval-admin__dropdown-panel">
                     <input
-                      type="checkbox"
-                      checked={{group.selected}}
-                      {{on "change" (fn this.toggleArrayField "allowed_group_ids" group.id)}}
+                      class="tz-approval-admin__search"
+                      value={{this.categorySearch}}
+                      placeholder={{i18n "tz_approval.admin.search_categories"}}
+                      {{on "input" (fn this.updateSearch "categorySearch")}}
                     />
-                    <span>{{group.name}}</span>
-                  </label>
-                {{/each}}
+
+                    <div class="tz-approval-admin__option-list">
+                      {{#each this.visibleCategoryOptions as |category|}}
+                        <label class="tz-approval-admin__option">
+                          <input
+                            type="checkbox"
+                            checked={{category.selected}}
+                            {{on "change" (fn this.toggleArrayField "category_ids" category.id)}}
+                          />
+                          <span>{{category.name}}</span>
+                        </label>
+                      {{else}}
+                        <p>{{i18n "tz_approval.admin.empty_options"}}</p>
+                      {{/each}}
+                    </div>
+                  </div>
+                </details>
+
+                <details class="tz-approval-admin__dropdown">
+                  <summary>
+                    <span>{{i18n "tz_approval.admin.fields.tags"}}</span>
+                    <strong>{{this.tagSummary}}</strong>
+                  </summary>
+                  <div class="tz-approval-admin__dropdown-panel">
+                    <input
+                      class="tz-approval-admin__search"
+                      value={{this.tagSearch}}
+                      placeholder={{i18n "tz_approval.admin.search_tags"}}
+                      {{on "input" (fn this.updateSearch "tagSearch")}}
+                    />
+
+                    <div class="tz-approval-admin__option-list">
+                      {{#each this.visibleTagOptions as |tag|}}
+                        <label class="tz-approval-admin__option">
+                          <input
+                            type="checkbox"
+                            checked={{tag.selected}}
+                            {{on "change" (fn this.toggleTag tag.name)}}
+                          />
+                          <span>{{tag.name}}</span>
+                        </label>
+                      {{else}}
+                        <p>{{i18n "tz_approval.admin.empty_options"}}</p>
+                      {{/each}}
+                    </div>
+                  </div>
+                </details>
+
+                <details class="tz-approval-admin__dropdown">
+                  <summary>
+                    <span>{{i18n "tz_approval.admin.fields.groups"}}</span>
+                    <strong>{{this.groupSummary}}</strong>
+                  </summary>
+                  <div class="tz-approval-admin__dropdown-panel">
+                    <input
+                      class="tz-approval-admin__search"
+                      value={{this.groupSearch}}
+                      placeholder={{i18n "tz_approval.admin.search_groups"}}
+                      {{on "input" (fn this.updateSearch "groupSearch")}}
+                    />
+
+                    <div class="tz-approval-admin__option-list">
+                      {{#each this.visibleGroupOptions as |group|}}
+                        <label class="tz-approval-admin__option">
+                          <input
+                            type="checkbox"
+                            checked={{group.selected}}
+                            {{on "change" (fn this.toggleArrayField "allowed_group_ids" group.id)}}
+                          />
+                          <span>{{group.name}}</span>
+                        </label>
+                      {{else}}
+                        <p>{{i18n "tz_approval.admin.empty_options"}}</p>
+                      {{/each}}
+                    </div>
+                  </div>
+                </details>
               </div>
             </section>
 
-            <section class="tz-approval-admin__texts">
-              <h3>{{i18n "tz_approval.admin.texts"}}</h3>
+            <section class="tz-approval-admin__section">
+              <div class="tz-approval-admin__section-head">
+                <h3>{{i18n "tz_approval.admin.texts"}}</h3>
+              </div>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.approve_text"}}</span>
-                <input value={{this.draft.approve_text}} {{on "input" (fn this.updateField "approve_text")}} />
-              </label>
+              <div class="tz-approval-admin__texts">
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.approve_text"}}</span>
+                  <input
+                    value={{this.draft.approve_text}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.approve_text"}}
+                    {{on "input" (fn this.updateField "approve_text")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.unapprove_text"}}</span>
-                <input value={{this.draft.unapprove_text}} {{on "input" (fn this.updateField "unapprove_text")}} />
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.unapprove_text"}}</span>
+                  <input
+                    value={{this.draft.unapprove_text}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.unapprove_text"}}
+                    {{on "input" (fn this.updateField "unapprove_text")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.approved_text"}}</span>
-                <input value={{this.draft.approved_text}} {{on "input" (fn this.updateField "approved_text")}} />
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.approved_text"}}</span>
+                  <input
+                    value={{this.draft.approved_text}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.approved_text"}}
+                    {{on "input" (fn this.updateField "approved_text")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.unapproved_text"}}</span>
-                <input value={{this.draft.unapproved_text}} {{on "input" (fn this.updateField "unapproved_text")}} />
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.unapproved_text"}}</span>
+                  <input
+                    value={{this.draft.unapproved_text}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.unapproved_text"}}
+                    {{on "input" (fn this.updateField "unapproved_text")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.approved_by_author_text"}}</span>
-                <input value={{this.draft.approved_by_author_text}} {{on "input" (fn this.updateField "approved_by_author_text")}} />
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.approved_by_author_text"}}</span>
+                  <input
+                    value={{this.draft.approved_by_author_text}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.approved_by_author_text"}}
+                    {{on "input" (fn this.updateField "approved_by_author_text")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.approved_action_text"}}</span>
-                <input value={{this.draft.approved_action_text}} {{on "input" (fn this.updateField "approved_action_text")}} />
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.approved_action_text"}}</span>
+                  <input
+                    value={{this.draft.approved_action_text}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.approved_action_text"}}
+                    {{on "input" (fn this.updateField "approved_action_text")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.unapproved_action_text"}}</span>
-                <input value={{this.draft.unapproved_action_text}} {{on "input" (fn this.updateField "unapproved_action_text")}} />
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.unapproved_action_text"}}</span>
+                  <input
+                    value={{this.draft.unapproved_action_text}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.unapproved_action_text"}}
+                    {{on "input" (fn this.updateField "unapproved_action_text")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.approved_description"}}</span>
-                <input value={{this.draft.approved_description}} {{on "input" (fn this.updateField "approved_description")}} />
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.approved_description"}}</span>
+                  <input
+                    value={{this.draft.approved_description}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.approved_description"}}
+                    {{on "input" (fn this.updateField "approved_description")}}
+                  />
+                </label>
 
-              <label>
-                <span>{{i18n "tz_approval.admin.fields.unapproved_description"}}</span>
-                <input value={{this.draft.unapproved_description}} {{on "input" (fn this.updateField "unapproved_description")}} />
-              </label>
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.unapproved_description"}}</span>
+                  <input
+                    value={{this.draft.unapproved_description}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.unapproved_description"}}
+                    {{on "input" (fn this.updateField "unapproved_description")}}
+                  />
+                </label>
+              </div>
             </section>
 
             <div class="tz-approval-admin__actions">

@@ -15,6 +15,7 @@ module TzApproval
           profiles: TzApproval::ProfileRecord.ordered.map(&:as_json),
           categories: category_options,
           groups: group_options,
+          tags: tag_options,
         }
       end
 
@@ -101,6 +102,10 @@ module TzApproval
           .order(:name)
           .pluck(:id, :name)
           .map { |id, name| { id: id, name: name } }
+      end
+
+      def tag_options
+        Tag.order(:name).pluck(:name)
       end
     end
   end
