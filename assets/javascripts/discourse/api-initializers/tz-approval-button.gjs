@@ -7,6 +7,20 @@ const DEFAULT_ICON = "file-signature";
 const ICON_REGEXP = /^[a-z0-9-]+$/;
 
 const APPROVAL_FIELDS = [
+  "approval_profile_key",
+  "approval_profile_prefix",
+  "approval_label",
+  "approval_icon",
+  "approval_approve_text",
+  "approval_unapprove_text",
+  "approval_approved_text",
+  "approval_approved_by_author_text",
+  "approved",
+  "approved_by_id",
+  "approved_by_username",
+  "approved_at",
+  "can_approve",
+  "can_unapprove",
   "tz_approved",
   "tz_approved_by_id",
   "tz_approved_by_username",
@@ -21,6 +35,14 @@ function safeIcon(icon) {
 
 function approvalIcon() {
   return safeIcon(helperContext().siteSettings.tz_approval_icon);
+}
+
+function topicApprovalIcon(topic) {
+  return safeIcon(topic.approval_icon || approvalIcon());
+}
+
+function isApproved(topic) {
+  return topic.approved ?? topic.tz_approved;
 }
 
 function setModelApprovalState(model, state) {
@@ -59,23 +81,35 @@ export default apiInitializer((api) => {
   api.registerTopicFooterButton({
     id: "tz-approval",
     icon() {
-      return approvalIcon();
+      return topicApprovalIcon(this.topic);
     },
     priority: 250,
-    dependentKeys: ["topic.tz_approved", "topic.can_approve_tz", "topic.can_unapprove_tz"],
+    dependentKeys: [
+      "topic.approved",
+      "topic.can_approve",
+      "topic.can_unapprove",
+      "topic.tz_approved",
+      "topic.can_approve_tz",
+      "topic.can_unapprove_tz",
+    ],
 
     displayed() {
-      return !!this.topic.can_approve_tz || !!this.topic.can_unapprove_tz;
+      return (
+        !!this.topic.can_approve ||
+        !!this.topic.can_unapprove ||
+        !!this.topic.can_approve_tz ||
+        !!this.topic.can_unapprove_tz
+      );
     },
 
     translatedLabel() {
-      return this.topic.tz_approved
-        ? I18n.t("tz_approval.unapprove")
-        : I18n.t("tz_approval.approve");
+      return isApproved(this.topic)
+        ? this.topic.approval_unapprove_text || I18n.t("tz_approval.unapprove")
+        : this.topic.approval_approve_text || I18n.t("tz_approval.approve");
     },
 
     classNames() {
-      return this.topic.tz_approved
+      return isApproved(this.topic)
         ? ["tz-approval-footer-button", "btn-success"]
         : ["tz-approval-footer-button"];
     },
@@ -83,8 +117,9 @@ export default apiInitializer((api) => {
     async action() {
       const topic = this.topic;
       const currentUser = api.getCurrentUser();
-      const isApproved = topic.tz_approved;
-      const endpoint = isApproved
+      const currentlyApproved = isApproved(topic);
+      const isTzProfile = topic.approval_profile_key === "tz" || !topic.approval_profile_key;
+      const endpoint = currentlyApproved
         ? "/tz-approval/unapprove"
         : "/tz-approval/approve";
 
@@ -93,12 +128,30 @@ export default apiInitializer((api) => {
       );
 
       syncApprovalState(topic, {
-        tz_approved: !isApproved,
-        can_approve_tz: isApproved,
-        can_unapprove_tz: !isApproved,
-        tz_approved_by_username: isApproved ? null : currentUser?.username,
-        tz_approved_by_id: isApproved ? null : currentUser?.id,
-        tz_approved_at: isApproved ? null : new Date().toISOString(),
+        approved: !currentlyApproved,
+        can_approve: currentlyApproved,
+        can_unapprove: !currentlyApproved,
+        approved_by_username: currentlyApproved ? null : currentUser?.username,
+        approved_by_id: currentlyApproved ? null : currentUser?.id,
+        approved_at: currentlyApproved ? null : new Date().toISOString(),
+        tz_approved: isTzProfile ? !currentlyApproved : topic.tz_approved,
+        can_approve_tz: isTzProfile ? currentlyApproved : topic.can_approve_tz,
+        can_unapprove_tz: isTzProfile ? !currentlyApproved : topic.can_unapprove_tz,
+        tz_approved_by_username: isTzProfile
+          ? currentlyApproved
+            ? null
+            : currentUser?.username
+          : topic.tz_approved_by_username,
+        tz_approved_by_id: isTzProfile
+          ? currentlyApproved
+            ? null
+            : currentUser?.id
+          : topic.tz_approved_by_id,
+        tz_approved_at: isTzProfile
+          ? currentlyApproved
+            ? null
+            : new Date().toISOString()
+          : topic.tz_approved_at,
       });
 
       try {

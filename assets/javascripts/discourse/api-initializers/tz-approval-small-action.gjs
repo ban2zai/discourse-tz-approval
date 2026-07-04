@@ -7,24 +7,64 @@ import { autoUpdatingRelativeAge } from "discourse/lib/formatter";
 import dIcon from "discourse-common/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 
-const TZ_APPROVAL_ACTION_CODES = ["tz_approved", "tz_unapproved"];
 const DEFAULT_ICON = "file-signature";
 const ICON_REGEXP = /^[a-z0-9-]+$/;
-
-function isTzApprovalAction(code) {
-  return TZ_APPROVAL_ACTION_CODES.includes(code);
-}
+const PREFIX_REGEXP = /^[a-z0-9_]+$/;
 
 function safeIcon(icon) {
   return ICON_REGEXP.test(icon || "") ? icon : DEFAULT_ICON;
 }
 
-function approvalIcon() {
-  return safeIcon(helperContext().siteSettings.tz_approval_icon);
+function safePrefix(prefix, fallback) {
+  const value = (prefix || "").toString().trim().toLowerCase().replace(/-/g, "_");
+  return PREFIX_REGEXP.test(value) ? value : fallback;
+}
+
+function approvalProfiles() {
+  const siteSettings = helperContext().siteSettings;
+
+  return [
+    {
+      key: "tz",
+      prefix: safePrefix(siteSettings.tz_approval_prefix, "tz"),
+      icon: safeIcon(siteSettings.tz_approval_icon),
+      approvedText: i18n("action_codes.tz_approved"),
+      unapprovedText: i18n("action_codes.tz_unapproved"),
+      approvedDescription: i18n("tz_approval.profiles.tz.approved_description"),
+      unapprovedDescription: i18n("tz_approval.profiles.tz.unapproved_description"),
+    },
+    {
+      key: "second_line",
+      prefix: safePrefix(siteSettings.second_line_approval_prefix, "second_line"),
+      icon: safeIcon(siteSettings.second_line_approval_icon || "clipboard-check"),
+      approvedText: i18n("action_codes.second_line_approved"),
+      unapprovedText: i18n("action_codes.second_line_unapproved"),
+      approvedDescription: i18n("tz_approval.profiles.second_line.approved_description"),
+      unapprovedDescription: i18n("tz_approval.profiles.second_line.unapproved_description"),
+    },
+  ];
+}
+
+function profileForActionCode(code) {
+  return approvalProfiles().find((profile) => {
+    return code === `${profile.prefix}_approved` || code === `${profile.prefix}_unapproved`;
+  });
+}
+
+function isApprovedAction(code) {
+  return code?.endsWith("_approved");
+}
+
+function isTzApprovalAction(code) {
+  return !!profileForActionCode(code);
+}
+
+function approvalIcon(prefix) {
+  return profileForActionCode(`${prefix}_approved`)?.icon || safeIcon(helperContext().siteSettings.tz_approval_icon);
 }
 
 export default apiInitializer((api) => {
-  api.replaceIcon("notification.tz_approval", approvalIcon());
+  api.replaceIcon("notification.tz_approval", safeIcon(helperContext().siteSettings.tz_approval_icon));
 
   if (api.registerNotificationTypeRenderer) {
     api.registerNotificationTypeRenderer("tz_approval", (NotificationItemBase) => {
@@ -34,17 +74,29 @@ export default apiInitializer((api) => {
         }
 
         get icon() {
-          return approvalIcon();
+          const prefix = this.notification.data.profile_prefix;
+          return approvalIcon(prefix);
         }
 
         get description() {
-          const action = this.notification.data.action;
-          const descriptionKey =
-            action === "unapproved"
-              ? "tz_approval.notification.unapproved_description"
-              : "tz_approval.notification.approved_description";
+          if (this.notification.data.description) {
+            return this.notification.data.description;
+          }
 
-          return i18n(descriptionKey);
+          const action = this.notification.data.action;
+          const profile = approvalProfiles().find(
+            (item) => item.key === this.notification.data.profile_key
+          );
+
+          if (profile) {
+            return action === "unapproved"
+              ? profile.unapprovedDescription
+              : profile.approvedDescription;
+          }
+
+          return action === "unapproved"
+            ? i18n("tz_approval.notification.unapproved_description")
+            : i18n("tz_approval.notification.approved_description");
         }
       };
     });
@@ -57,7 +109,13 @@ export default apiInitializer((api) => {
 
     return class TzApprovalSmallAction extends Component {
       get title() {
-        return i18n(`action_codes.${this.args.code}`);
+        const profile = profileForActionCode(this.args.code);
+
+        if (!profile) {
+          return i18n(`action_codes.${this.args.code}`);
+        }
+
+        return isApprovedAction(this.args.code) ? profile.approvedText : profile.unapprovedText;
       }
 
       get cooked() {
@@ -103,7 +161,7 @@ export default apiInitializer((api) => {
       });
 
       get approvalIcon() {
-        return approvalIcon();
+        return profileForActionCode(this.args.code)?.icon || safeIcon(DEFAULT_ICON);
       }
 
       <template>
@@ -156,6 +214,6 @@ export default apiInitializer((api) => {
       return value;
     }
 
-    return approvalIcon();
+    return profileForActionCode(context.code)?.icon || safeIcon(DEFAULT_ICON);
   });
 });

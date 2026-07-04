@@ -16,6 +16,11 @@ plugins:
     default: "тех-задание"
     client: true
 
+  tz_approval_prefix:
+    type: string
+    default: "tz"
+    client: true
+
   tz_approval_allowed_groups:
     type: group_list
     default: ""
@@ -42,4 +47,31 @@ plugins:
   tz_approval_icon:
     type: icon
     default: "file-signature"
+    client: true
+
+  second_line_approval_enabled:
+    default: false
+    client: true
+
+  second_line_approval_prefix:
+    type: string
+    default: "second_line"
+    client: true
+
+  second_line_approval_categories:
+    type: category_list
+    default: ""
+
+  second_line_approval_allowed_groups:
+    type: group_list
+    default: ""
+
+  second_line_approval_icon:
+    type: icon
+    default: "clipboard-check"
+    client: true
+
+  second_line_approval_label:
+    type: string
+    default: "Вторая линия"
     client: true

@@ -45,7 +45,18 @@ export default apiInitializer((api) => {
       @service siteSettings;
 
       get approvalIcon() {
-        return safeIcon(this.siteSettings.tz_approval_icon);
+        return safeIcon(
+          this.args.outletArgs.topic.approval_icon || this.siteSettings.tz_approval_icon
+        );
+      }
+
+      get approved() {
+        const topic = this.args.outletArgs.topic;
+        return topic.approved ?? topic.tz_approved;
+      }
+
+      get approvedText() {
+        return this.args.outletArgs.topic.approval_approved_text || i18n("tz_approval.approved");
       }
 
       moveIntoTopicStatuses = modifier((element) => {
@@ -102,12 +113,12 @@ export default apiInitializer((api) => {
       });
 
       <template>
-        {{#if @outletArgs.topic.tz_approved}}
+        {{#if this.approved}}
           <span
             class="tz-approval-topic-status --tz-approved"
             data-tz-approval-topic-status
-            title={{i18n "tz_approval.approved"}}
-            aria-label={{i18n "tz_approval.approved"}}
+            title={{this.approvedText}}
+            aria-label={{this.approvedText}}
             hidden
             {{this.moveIntoTopicStatuses}}
           >
@@ -119,8 +130,12 @@ export default apiInitializer((api) => {
   );
 
   api.registerValueTransformer("topic-list-item-class", ({ value, context }) => {
-    if (context.topic.tz_approved) {
+    if (context.topic.approved ?? context.topic.tz_approved) {
       value.push("status-tz-approved");
+
+      if (context.topic.approval_profile_prefix) {
+        value.push(`status-${context.topic.approval_profile_prefix}-approved`);
+      }
     }
 
     return value;

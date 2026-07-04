@@ -32,11 +32,31 @@ export default apiInitializer((api) => {
       }
 
       get approvalIcon() {
-        return safeIcon(this.siteSettings.tz_approval_icon);
+        return safeIcon(this.topic?.approval_icon || this.siteSettings.tz_approval_icon);
+      }
+
+      get approved() {
+        return this.topic?.approved ?? this.topic?.tz_approved;
+      }
+
+      get approvedById() {
+        return this.topic?.approved_by_id ?? this.topic?.tz_approved_by_id;
+      }
+
+      get approvedByUsername() {
+        return this.topic?.approved_by_username ?? this.topic?.tz_approved_by_username;
+      }
+
+      get approvedText() {
+        return this.topic?.approval_approved_text || i18n("tz_approval.approved");
+      }
+
+      get approvedByAuthorText() {
+        return this.topic?.approval_approved_by_author_text || i18n("tz_approval.approved_by_author");
       }
 
       <template>
-        {{#if this.topic.tz_approved}}
+        {{#if this.approved}}
           <div
             class="tz-approval-post-badge"
             data-tz-approval-post-badge
@@ -46,19 +66,19 @@ export default apiInitializer((api) => {
             </span>
 
             <span class="tz-approval-post-badge__text">
-              {{#if (eq this.topic.tz_approved_by_id this.post.user_id)}}
-                {{i18n "tz_approval.approved_by_author"}}
-              {{else if this.topic.tz_approved_by_username}}
-                {{i18n "tz_approval.approved"}}
+              {{#if (eq this.approvedById this.post.user_id)}}
+                {{this.approvedByAuthorText}}
+              {{else if this.approvedByUsername}}
+                {{this.approvedText}}
                 —
                 <UserLink
-                  @username={{this.topic.tz_approved_by_username}}
+                  @username={{this.approvedByUsername}}
                   class="tz-approval-post-badge__user"
                 >
-                  @{{this.topic.tz_approved_by_username}}
+                  @{{this.approvedByUsername}}
                 </UserLink>
               {{else}}
-                {{i18n "tz_approval.approved_by_author"}}
+                {{this.approvedByAuthorText}}
               {{/if}}
             </span>
           </div>

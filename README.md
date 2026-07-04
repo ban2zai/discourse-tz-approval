@@ -1,6 +1,6 @@
 # discourse-tz-approval
 
-Плагин Discourse для механизма «одобрения ТЗ» в темах. Работает только для тем, которые проходят условия плагина: включена настройка и тема подходит под выбранный режим привязки — по тегу или по категории.
+Плагин Discourse для механизма профильного одобрения тем. Базовый профиль — «ТЗ», дополнительный профиль — «Вторая линия». Для каждой темы применяется только один профиль: сначала проверяется ТЗ, затем «Вторая линия».
 
 Целевой стек: Discourse 2026.x, Glimmer topic list, без `.raw.hbs`/старых handlebars-overrides.
 
@@ -13,6 +13,7 @@
   - плашкой внутри первого поста;
   - системным small action сообщением в потоке ответов.
 - Пишет состояние в `TopicCustomField`, без отдельной таблицы и миграций.
+- Для каждого профиля использует свой prefix в API/БД: например `tz_approved` или `second_line_approved`.
 - Добавляет фильтры расширенного поиска:
   - `status:tz-approved`;
   - `status:tz-unapproved`.
@@ -41,12 +42,21 @@ cd /var/discourse
 | `tz_approval_enabled` | boolean | `true` | Полностью включает/выключает механизм. |
 | `tz_approval_binding_mode` | enum | `tag` | Режим применимости: `tag` — по тегам, `category` — по категориям. |
 | `tz_approval_tags` | list | `тех-задание` | Список тегов для режима `tag`. Достаточно одного совпавшего тега. В режиме `category` игнорируется. |
+| `tz_approval_prefix` | string | `tz` | Префикс custom fields/API для профиля ТЗ. По умолчанию сохраняет старые поля `tz_approved`, `tz_approved_by_id`, `tz_approved_at`. |
 | `tz_approval_allowed_groups` | group_list | пусто | Группы, которым разрешено одобрять и снимать одобрение ТЗ. Staff имеет доступ всегда. |
 | `tz_approval_categories` | category_list | пусто | Список категорий для режима `category`. Пусто означает «не выбрано ни одной категории». Подкатегории не наследуются автоматически. |
 | `tz_author_approval_delay` | integer | `600` | Задержка в секундах, после которой автор темы может сам одобрить свое ТЗ. |
 | `tz_approval_icon` | icon | `file-signature` | Иконка статуса ТЗ. Нужно использовать имя зарегистрированной FontAwesome/Discourse SVG-иконки. |
 | `tz_approval_light_color` | string | `#d9a441` | Цвет для светлой темы, зарезервирован под визуальную настройку. |
 | `tz_approval_dark_color` | string | `#d9a441` | Цвет для темной темы, зарезервирован под визуальную настройку. |
+| `second_line_approval_enabled` | boolean | `false` | Включает профиль одобрения «Вторая линия». |
+| `second_line_approval_prefix` | string | `second_line` | Префикс custom fields/API для профиля «Вторая линия». |
+| `second_line_approval_categories` | category_list | пусто | Категории, в которых применяется профиль «Вторая линия». |
+| `second_line_approval_allowed_groups` | group_list | пусто | Группы, которым разрешено одобрять и снимать одобрение второй линии. |
+| `second_line_approval_icon` | icon | `clipboard-check` | Иконка статуса второй линии. |
+| `second_line_approval_label` | string | `Вторая линия` | Название профиля, которое возвращается в JSON. |
+
+`*_approval_prefix` должен состоять из латинских букв, цифр и `_`. Некорректный prefix заменяется безопасным значением по умолчанию.
 
 Текущий базовый цвет интерфейса задан CSS-переменной:
 
@@ -64,7 +74,9 @@ cd /var/discourse
 2. в режиме `tag` у темы есть хотя бы один тег из `tz_approval_tags`;
 3. в режиме `category` категория темы выбрана в `tz_approval_categories`.
 
-В режиме `tag` выбранные категории не влияют на применимость. В режиме `category` теги не влияют на применимость. Если `tz_approval_binding_mode = category`, а `tz_approval_categories` пустой, механизм не работает ни в одной теме.
+В режиме `tag` выбранные категории не влияют на применимость. В режиме `category` теги не влияют на применимость. Если `tz_approval_binding_mode = category`, а `tz_approval_categories` пустой, профиль ТЗ не работает ни в одной теме.
+
+Профиль «Вторая линия» всегда включается по категориям из `second_line_approval_categories`. Если тема попадает и в ТЗ, и во вторую линию, применяется профиль ТЗ.
 
 Одобрить ТЗ могут:
 
@@ -155,6 +167,8 @@ cd /var/discourse
 ```text
 status:tz-approved
 status:tz-unapproved
+status:second-line-approved
+status:second-line-unapproved
 ```
 
 `status:tz-approved` возвращает применимые темы, которые:
@@ -164,6 +178,8 @@ status:tz-unapproved
 `status:tz-unapproved` возвращает применимые темы, которые:
 
 - еще не имеют `tz_approved = true`.
+
+`status:second-line-approved` и `status:second-line-unapproved` работают аналогично, но только для категорий профиля «Вторая линия» и поля `second_line_approved`.
 
 Применимость в поиске определяется тем же режимом, что и кнопка одобрения:
 
@@ -194,14 +210,39 @@ curl -X POST "https://forum.example.com/tz-approval/approve" \
 
 Права все равно проверяются через Guardian.
 
+Ответ endpoint содержит старые поля `tz_*` и новые профильные поля:
+
+```json
+{
+  "approval_profile_key": "second_line",
+  "approval_profile_prefix": "second_line",
+  "approval_label": "Вторая линия",
+  "approval_icon": "clipboard-check",
+  "approved": true,
+  "approved_by_id": 10,
+  "approved_by_username": "moderator",
+  "approved_at": "2026-07-04T08:00:00Z",
+  "can_approve": false,
+  "can_unapprove": true,
+  "tz_approved": false
+}
+```
+
 ## Хранение данных
 
-Плагин использует `TopicCustomField`:
+Плагин использует `TopicCustomField`. Для ТЗ по умолчанию сохраняются старые поля:
 
 - `tz_approved` — boolean;
 - `tz_approved_by_id` — integer;
 - `tz_approved_at` — ISO8601 timestamp string;
 - `tz_approval_post_id` — integer, legacy/служебное поле.
+
+Для «Второй линии» при prefix `second_line` используются:
+
+- `second_line_approved` — boolean;
+- `second_line_approved_by_id` — integer;
+- `second_line_approved_at` — ISO8601 timestamp string;
+- `second_line_approval_post_id` — integer, служебное поле.
 
 В topic view сериализуются:
 
@@ -211,6 +252,19 @@ curl -X POST "https://forum.example.com/tz-approval/approve" \
 - `tz_approved_by_username`;
 - `can_approve_tz`;
 - `can_unapprove_tz`.
+
+Дополнительно сериализуются профильные поля:
+
+- `approval_profile_key`;
+- `approval_profile_prefix`;
+- `approval_label`;
+- `approval_icon`;
+- `approved`;
+- `approved_by_id`;
+- `approved_by_username`;
+- `approved_at`;
+- `can_approve`;
+- `can_unapprove`.
 
 В topic list сериализуется:
 

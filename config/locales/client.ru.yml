@@ -2,7 +2,7 @@ ru:
   js:
     notifications:
       alt:
-        tz_approval: "Статус ТЗ изменен"
+        tz_approval: "Статус одобрения изменен"
     tz_approval:
       approve: "Одобрить ТЗ"
       unapprove: "Снять одобрение"
@@ -10,16 +10,43 @@ ru:
       approved_by: "ТЗ одобрено — %{username}"
       approved_by_author: "ТЗ одобрено — Автор темы"
       notification:
-        title: "Статус ТЗ изменен"
-        approved_notification: "%{display_username} одобрил ваше ТЗ"
-        unapproved_notification: "%{display_username} снял одобрение с вашего ТЗ"
-        approved_description: "ТЗ подтверждено"
-        unapproved_description: "ТЗ снято с подтверждения"
+        title: "Статус одобрения изменен"
+        approved_notification: "%{display_username} изменил статус одобрения"
+        unapproved_notification: "%{display_username} изменил статус одобрения"
+        approved_description: "Статус подтвержден"
+        unapproved_description: "Подтверждение снято"
+      profiles:
+        tz:
+          approve: "Одобрить ТЗ"
+          unapprove: "Снять одобрение"
+          approved: "ТЗ одобрено"
+          unapproved: "Одобрение ТЗ снято"
+          approved_by_author: "ТЗ одобрено — Автор темы"
+          approved_description: "ТЗ подтверждено"
+          unapproved_description: "ТЗ снято с подтверждения"
+          notification:
+            approved_notification: "%{display_username} одобрил ваше ТЗ"
+            unapproved_notification: "%{display_username} снял одобрение с вашего ТЗ"
+        second_line:
+          approve: "Одобрить вторую линию"
+          unapprove: "Снять одобрение второй линии"
+          approved: "Вторая линия одобрена"
+          unapproved: "Одобрение второй линии снято"
+          approved_by_author: "Вторая линия одобрена — Автор темы"
+          approved_description: "Вторая линия подтверждена"
+          unapproved_description: "Одобрение второй линии снято"
+          notification:
+            approved_notification: "%{display_username} одобрил вашу вторую линию"
+            unapproved_notification: "%{display_username} снял одобрение с вашей второй линии"
     action_codes:
       tz_approved: "ТЗ одобрено"
       tz_unapproved: "Одобрение ТЗ снято"
+      second_line_approved: "Вторая линия одобрена"
+      second_line_unapproved: "Одобрение второй линии снято"
     search:
       advanced:
         statuses:
           tz_approved: "ТЗ одобрено"
           tz_unapproved: "ТЗ не одобрено"
+          second_line_approved: "Вторая линия одобрена"
+          second_line_unapproved: "Вторая линия не одобрена"

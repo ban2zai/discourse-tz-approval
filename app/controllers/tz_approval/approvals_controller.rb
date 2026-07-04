@@ -7,29 +7,38 @@ module TzApproval
 
     def approve
       topic = Topic.find(params[:topic_id])
+      profile = TzApproval.topic_applicable_profile(topic)
 
-      raise Discourse::InvalidAccess.new unless TzApproval.topic_applicable?(topic)
+      raise Discourse::InvalidAccess.new unless profile
       guardian.ensure_can_approve_tz!(topic)
 
       approved_topic = nil
 
       ActiveRecord::Base.transaction do
         topic = Topic.lock.find(topic.id)
+        profile = TzApproval.topic_applicable_profile(topic)
 
-        if topic.tz_approved?
+        raise Discourse::InvalidAccess.new unless profile
+
+        if TzApproval.topic_approved_for_profile?(topic, profile)
           approved_topic = topic
           next
         end
 
         approved_at = Time.now.utc
-        topic.custom_fields["tz_approved"]       = true
-        topic.custom_fields["tz_approved_by_id"] = current_user.id
-        topic.custom_fields["tz_approved_at"]    = approved_at.iso8601
+        topic.custom_fields[TzApproval.approved_field(profile)] = true
+        topic.custom_fields[TzApproval.approved_by_id_field(profile)] = current_user.id
+        topic.custom_fields[TzApproval.approved_at_field(profile)] = approved_at.iso8601
 
-        post = create_tz_approval_status_post(topic, "approved_action", "tz_approved")
-        topic.custom_fields["tz_approval_post_id"] = post.id
+        post = create_tz_approval_status_post(
+          topic,
+          profile,
+          "approved_action",
+          TzApproval.approved_action_code(profile),
+        )
+        topic.custom_fields[TzApproval.approval_post_id_field(profile)] = post.id
         topic.save_custom_fields(true)
-        notify_topic_author(topic, post, "approved")
+        notify_topic_author(topic, profile, post, "approved")
 
         approved_topic = topic
       end
@@ -42,25 +51,37 @@ module TzApproval
 
     def unapprove
       topic = Topic.find(params[:topic_id])
+      profile = TzApproval.topic_applicable_profile(topic)
+
+      raise Discourse::InvalidAccess.new unless profile
       guardian.ensure_can_unapprove_tz!(topic)
 
       unapproved_topic = nil
 
       ActiveRecord::Base.transaction do
         topic = Topic.lock.find(topic.id)
+        profile = TzApproval.topic_applicable_profile(topic)
 
-        unless topic.tz_approved?
+        raise Discourse::InvalidAccess.new unless profile
+
+        unless TzApproval.topic_approved_for_profile?(topic, profile)
           unapproved_topic = topic
           next
         end
 
-        topic.custom_fields["tz_approved"]         = nil
-        topic.custom_fields["tz_approved_by_id"]   = nil
-        topic.custom_fields["tz_approved_at"]       = nil
-        topic.custom_fields["tz_approval_post_id"] = nil
+        topic.custom_fields[TzApproval.approved_field(profile)] = nil
+        topic.custom_fields[TzApproval.approved_by_id_field(profile)] = nil
+        topic.custom_fields[TzApproval.approved_at_field(profile)] = nil
+        topic.custom_fields[TzApproval.approval_post_id_field(profile)] = nil
         topic.save_custom_fields(true)
-        post = create_tz_approval_status_post(topic, "unapproved_action", "tz_unapproved")
-        notify_topic_author(topic, post, "unapproved")
+
+        post = create_tz_approval_status_post(
+          topic,
+          profile,
+          "unapproved_action",
+          TzApproval.unapproved_action_code(profile),
+        )
+        notify_topic_author(topic, profile, post, "unapproved")
 
         unapproved_topic = topic
       end
@@ -79,23 +100,24 @@ module TzApproval
       )
     end
 
-    def create_tz_approval_status_post(topic, translation_key, action_code)
+    def create_tz_approval_status_post(topic, profile, translation_key, action_code)
       PostCreator.create!(
         Discourse.system_user,
-        raw:              I18n.t(
-          "tz_approval.#{translation_key}",
+        raw: I18n.t(
+          "tz_approval.profiles.#{profile.key}.#{translation_key}",
           username: tz_approval_actor(topic),
+          label: profile.label,
         ),
-        topic_id:         topic.id,
-        post_type:        Post.types[:small_action],
-        action_code:      action_code,
+        topic_id: topic.id,
+        post_type: Post.types[:small_action],
+        action_code: action_code,
         skip_validations: true,
-        bypass_bump:      true,
-        skip_jobs:        true,
+        bypass_bump: true,
+        skip_jobs: true,
       )
     end
 
-    def notify_topic_author(topic, post, action)
+    def notify_topic_author(topic, profile, post, action)
       return if current_user.id == topic.user_id
 
       topic_author = User.find_by(id: topic.user_id)
@@ -107,15 +129,19 @@ module TzApproval
 
       Notification.create!(
         notification_type: Notification.types[:tz_approval],
-        user_id:           topic_author.id,
-        topic_id:          topic.id,
-        post_number:       post.post_number,
-        data:              {
-          action:           action,
-          message:          "tz_approval.notification.#{action}_notification",
-          title:            "tz_approval.notification.title",
+        user_id: topic_author.id,
+        topic_id: topic.id,
+        post_number: post.post_number,
+        data: {
+          action: action,
+          profile_key: profile.key,
+          profile_prefix: profile.prefix,
+          profile_label: profile.label,
+          description: TzApproval.profile_text(profile, "#{action}_description"),
+          message: "tz_approval.profiles.#{profile.key}.notification.#{action}_notification",
+          title: "tz_approval.notification.title",
           display_username: current_user.username,
-          topic_title:      topic.title,
+          topic_title: topic.title,
         }.to_json,
       )
     end
@@ -129,14 +155,13 @@ module TzApproval
     end
 
     def tz_approval_payload(topic)
-      {
-        tz_approved:             topic.tz_approved?,
-        tz_approved_by_id:       topic.tz_approved_by_id,
-        tz_approved_at:          topic.tz_approved_at,
-        tz_approved_by_username: User.find_by(id: topic.tz_approved_by_id)&.username,
-        can_approve_tz:          guardian.can_approve_tz?(topic),
-        can_unapprove_tz:        guardian.can_unapprove_tz?(topic),
-      }
+      TzApproval
+        .profile_payload(topic, guardian, include_username: true)
+        .merge(TzApproval.tz_payload(topic))
+        .merge(
+          can_approve_tz: guardian.can_approve_tz?(topic),
+          can_unapprove_tz: guardian.can_unapprove_tz?(topic),
+        )
     end
   end
 end

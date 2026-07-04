@@ -46,11 +46,15 @@ export default apiInitializer((api) => {
       @service siteSettings;
 
       static shouldRender(args) {
-        return args.model?.tz_approved;
+        return args.model?.approved ?? args.model?.tz_approved;
       }
 
       get approvalIcon() {
-        return safeIcon(this.siteSettings.tz_approval_icon);
+        return safeIcon(this.args.model?.approval_icon || this.siteSettings.tz_approval_icon);
+      }
+
+      get approvedText() {
+        return this.args.model?.approval_approved_text || i18n("tz_approval.approved");
       }
 
       moveIntoTopicStatuses = modifier((element, [targetSelector, targetKey]) => {
@@ -112,8 +116,8 @@ export default apiInitializer((api) => {
         <span
           class="tz-approval-topic-status tz-approval-topic-title-status --tz-approved"
           data-tz-approval-topic-title-status="main"
-          title={{i18n "tz_approval.approved"}}
-          aria-label={{i18n "tz_approval.approved"}}
+          title={{this.approvedText}}
+          aria-label={{this.approvedText}}
           hidden
           {{this.moveIntoTopicStatuses "#topic-title h1 .topic-statuses" "main"}}
         >
@@ -123,8 +127,8 @@ export default apiInitializer((api) => {
         <span
           class="tz-approval-topic-status tz-approval-topic-title-status --tz-approved"
           data-tz-approval-topic-title-status="header"
-          title={{i18n "tz_approval.approved"}}
-          aria-label={{i18n "tz_approval.approved"}}
+          title={{this.approvedText}}
+          aria-label={{this.approvedText}}
           hidden
           {{this.moveIntoTopicStatuses "h1.header-title .topic-statuses" "header"}}
         >

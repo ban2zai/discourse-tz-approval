@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # name: discourse-tz-approval
-# about: Механизм одобрения ТЗ для тем Discourse
+# about: Механизм одобрения ТЗ и других профильных статусов для тем Discourse
 # version: 0.1.0
 # authors: ban2zai
 # url: https://github.com/ban2zai/discourse-tz-approval
@@ -21,33 +21,220 @@ register_asset "stylesheets/tz-approval.scss"
 module ::TzApproval
   PLUGIN_NAME = "discourse-tz-approval"
   CATEGORY_BINDING_MODE = "category"
+  TAG_BINDING_MODE = "tag"
   NOTIFICATION_TYPE_ID = 167
+  PROFILE_PREFIX_REGEXP = /\A[a-z0-9_]+\z/
+
+  Profile =
+    Struct.new(
+      :key,
+      :prefix,
+      :label,
+      :categories,
+      :allowed_groups,
+      :icon,
+      :enabled,
+      :binding_mode,
+      :tags,
+      :status_slug,
+      keyword_init: true,
+    )
+
+  def self.safe_prefix(value, fallback)
+    prefix = value.to_s.strip.downcase.tr("-", "_")
+    prefix.match?(PROFILE_PREFIX_REGEXP) ? prefix : fallback
+  end
+
+  def self.safe_icon(value, fallback)
+    value.to_s.match?(/\A[a-z0-9-]+\z/) ? value.to_s : fallback
+  end
 
   def self.approval_tags
     SiteSetting.tz_approval_tags.to_s.split("|").map(&:strip).reject(&:blank?)
   end
 
-  def self.category_binding_mode?
-    SiteSetting.tz_approval_binding_mode.to_s == CATEGORY_BINDING_MODE
+  def self.tz_profile
+    Profile.new(
+      key: "tz",
+      prefix: safe_prefix(SiteSetting.tz_approval_prefix, "tz"),
+      label: I18n.t("tz_approval.profiles.tz.label"),
+      categories: SiteSetting.tz_approval_categories_map,
+      allowed_groups: SiteSetting.tz_approval_allowed_groups_map,
+      icon: safe_icon(SiteSetting.tz_approval_icon, "file-signature"),
+      enabled: SiteSetting.tz_approval_enabled,
+      binding_mode: SiteSetting.tz_approval_binding_mode.to_s,
+      tags: approval_tags,
+      status_slug: "tz",
+    )
   end
 
-  def self.topic_has_approval_tag?(topic)
-    (topic.tags.map(&:name) & approval_tags).present?
+  def self.second_line_profile
+    Profile.new(
+      key: "second_line",
+      prefix: safe_prefix(SiteSetting.second_line_approval_prefix, "second_line"),
+      label: SiteSetting.second_line_approval_label.presence ||
+        I18n.t("tz_approval.profiles.second_line.label"),
+      categories: SiteSetting.second_line_approval_categories_map,
+      allowed_groups: SiteSetting.second_line_approval_allowed_groups_map,
+      icon: safe_icon(SiteSetting.second_line_approval_icon, "clipboard-check"),
+      enabled: SiteSetting.tz_approval_enabled && SiteSetting.second_line_approval_enabled,
+      binding_mode: CATEGORY_BINDING_MODE,
+      tags: [],
+      status_slug: "second-line",
+    )
   end
 
-  def self.topic_in_approval_category?(topic)
-    category_ids = SiteSetting.tz_approval_categories_map
-    category_ids.present? && category_ids.include?(topic.category_id)
+  def self.all_profiles
+    [tz_profile, second_line_profile]
+  end
+
+  def self.profiles
+    all_profiles.select(&:enabled)
+  end
+
+  def self.profile_for_key(key)
+    profiles.find { |profile| profile.key == key.to_s }
+  end
+
+  def self.all_profile_for_key(key)
+    all_profiles.find { |profile| profile.key == key.to_s }
+  end
+
+  def self.topic_has_approval_tag?(topic, profile)
+    (topic.tags.map(&:name) & profile.tags).present?
+  end
+
+  def self.topic_in_approval_category?(topic, profile)
+    profile.categories.present? && profile.categories.include?(topic.category_id)
+  end
+
+  def self.topic_applicable_for_profile?(topic, profile)
+    return false unless profile&.enabled
+
+    if profile.binding_mode == CATEGORY_BINDING_MODE
+      topic_in_approval_category?(topic, profile)
+    else
+      topic_has_approval_tag?(topic, profile)
+    end
+  end
+
+  def self.topic_applicable_profile(topic)
+    profiles.find { |profile| topic_applicable_for_profile?(topic, profile) }
   end
 
   def self.topic_applicable?(topic)
-    return false unless SiteSetting.tz_approval_enabled
+    topic_applicable_profile(topic).present?
+  end
 
-    if category_binding_mode?
-      topic_in_approval_category?(topic)
-    else
-      topic_has_approval_tag?(topic)
+  def self.field_name(profile, suffix)
+    "#{profile.prefix}_#{suffix}"
+  end
+
+  def self.approved_field(profile)
+    field_name(profile, "approved")
+  end
+
+  def self.approved_by_id_field(profile)
+    field_name(profile, "approved_by_id")
+  end
+
+  def self.approved_at_field(profile)
+    field_name(profile, "approved_at")
+  end
+
+  def self.approval_post_id_field(profile)
+    field_name(profile, "approval_post_id")
+  end
+
+  def self.approved_action_code(profile)
+    field_name(profile, "approved")
+  end
+
+  def self.unapproved_action_code(profile)
+    field_name(profile, "unapproved")
+  end
+
+  def self.topic_approved_for_profile?(topic, profile)
+    value = topic.custom_fields[approved_field(profile)]
+    value == true || value == "true" || value == "t" || value == "1"
+  end
+
+  def self.topic_approved_by_id_for_profile(topic, profile)
+    topic.custom_fields[approved_by_id_field(profile)]
+  end
+
+  def self.topic_approved_at_for_profile(topic, profile)
+    topic.custom_fields[approved_at_field(profile)]
+  end
+
+  def self.profile_text(profile, key)
+    I18n.t("tz_approval.profiles.#{profile.key}.#{key}", label: profile.label)
+  end
+
+  def self.profile_payload(topic, guardian = nil, include_username: true)
+    profile = topic_applicable_profile(topic)
+    payload = {
+      approval_profile_key: nil,
+      approval_profile_prefix: nil,
+      approval_label: nil,
+      approval_icon: nil,
+      approval_approve_text: nil,
+      approval_unapprove_text: nil,
+      approval_approved_text: nil,
+      approval_approved_by_author_text: nil,
+      approved: false,
+      approved_by_id: nil,
+      approved_at: nil,
+    }
+
+    if profile
+      approved_by_id = topic_approved_by_id_for_profile(topic, profile)
+      payload.merge!(
+        approval_profile_key: profile.key,
+        approval_profile_prefix: profile.prefix,
+        approval_label: profile.label,
+        approval_icon: profile.icon,
+        approval_approve_text: profile_text(profile, "approve"),
+        approval_unapprove_text: profile_text(profile, "unapprove"),
+        approval_approved_text: profile_text(profile, "approved"),
+        approval_approved_by_author_text: profile_text(profile, "approved_by_author"),
+        approved: topic_approved_for_profile?(topic, profile),
+        approved_by_id: approved_by_id,
+        approved_at: topic_approved_at_for_profile(topic, profile),
+      )
+
+      payload[:approved_by_username] = User.find_by(id: approved_by_id)&.username if include_username
     end
+
+    if guardian
+      payload[:can_approve] = guardian.can_approve_tz?(topic)
+      payload[:can_unapprove] = guardian.can_unapprove_tz?(topic)
+    end
+
+    payload
+  end
+
+  def self.tz_payload(topic)
+    profile = profile_for_key("tz") || tz_profile
+    approved_by_id = topic_approved_by_id_for_profile(topic, profile)
+
+    {
+      tz_approved: topic_approved_for_profile?(topic, profile),
+      tz_approved_by_id: approved_by_id,
+      tz_approved_at: topic_approved_at_for_profile(topic, profile),
+      tz_approved_by_username: User.find_by(id: approved_by_id)&.username,
+    }
+  end
+
+  def self.profile_custom_field_names
+    all_profiles.flat_map do |profile|
+      [
+        approved_field(profile),
+        approved_by_id_field(profile),
+        approved_at_field(profile),
+        approval_post_id_field(profile),
+      ]
+    end.uniq
   end
 end
 
@@ -57,32 +244,52 @@ after_initialize do
   Notification.types[:tz_approval] = TzApproval::NOTIFICATION_TYPE_ID
 
   # ── Custom fields ────────────────────────────────────────────────────────────
-  register_topic_custom_field_type("tz_approved",         :boolean)
-  register_topic_custom_field_type("tz_approved_by_id",   :integer)
-  register_topic_custom_field_type("tz_approved_at",      :string)
-  register_topic_custom_field_type("tz_approval_post_id", :integer)
+  TzApproval.all_profiles.each do |profile|
+    register_topic_custom_field_type(TzApproval.approved_field(profile), :boolean)
+    register_topic_custom_field_type(TzApproval.approved_by_id_field(profile), :integer)
+    register_topic_custom_field_type(TzApproval.approved_at_field(profile), :string)
+    register_topic_custom_field_type(TzApproval.approval_post_id_field(profile), :integer)
 
-  add_preloaded_topic_list_custom_field("tz_approved")
-  add_preloaded_topic_list_custom_field("tz_approved_by_id")
-  add_preloaded_topic_list_custom_field("tz_approved_at")
+    add_preloaded_topic_list_custom_field(TzApproval.approved_field(profile))
+    add_preloaded_topic_list_custom_field(TzApproval.approved_by_id_field(profile))
+    add_preloaded_topic_list_custom_field(TzApproval.approved_at_field(profile))
+  end
 
   # ── Геттеры на Topic ─────────────────────────────────────────────────────────
-  add_to_class(:topic, :tz_approved?)      { custom_fields["tz_approved"] == true }
-  add_to_class(:topic, :tz_approved_by_id) { custom_fields["tz_approved_by_id"] }
-  add_to_class(:topic, :tz_approved_at)    { custom_fields["tz_approved_at"] }
+  add_to_class(:topic, :tz_approval_profile) { TzApproval.topic_applicable_profile(self) }
+  add_to_class(:topic, :tz_approval_approved?) do
+    profile = tz_approval_profile
+    profile.present? && TzApproval.topic_approved_for_profile?(self, profile)
+  end
+  add_to_class(:topic, :tz_approved?) do
+    profile = TzApproval.profile_for_key("tz") || TzApproval.tz_profile
+    TzApproval.topic_approved_for_profile?(self, profile)
+  end
+  add_to_class(:topic, :tz_approved_by_id) do
+    profile = TzApproval.profile_for_key("tz") || TzApproval.tz_profile
+    TzApproval.topic_approved_by_id_for_profile(self, profile)
+  end
+  add_to_class(:topic, :tz_approved_at) do
+    profile = TzApproval.profile_for_key("tz") || TzApproval.tz_profile
+    TzApproval.topic_approved_at_for_profile(self, profile)
+  end
 
   # ── Guardian extension ───────────────────────────────────────────────────────
   module TzApproval::GuardianExtensions
     def can_approve_tz?(topic)
-      return false unless TzApproval.topic_applicable?(topic)
-      return false if topic.tz_approved?
+      profile = TzApproval.topic_applicable_profile(topic)
+      return false unless profile
+      return false if TzApproval.topic_approved_for_profile?(topic, profile)
       return true if is_staff?
-      allowed = SiteSetting.tz_approval_allowed_groups_map
+
+      allowed = profile.allowed_groups
       return true if allowed.present? && @user&.in_any_groups?(allowed)
+
       if @user&.id == topic.user_id
         delay = SiteSetting.tz_author_approval_delay.to_i
         return Time.now.to_i - topic.created_at.to_i >= delay
       end
+
       false
     end
 
@@ -91,12 +298,16 @@ after_initialize do
     end
 
     def can_unapprove_tz?(topic)
-      return false unless TzApproval.topic_applicable?(topic)
-      return false unless topic.tz_approved?
-      allowed = SiteSetting.tz_approval_allowed_groups_map
+      profile = TzApproval.topic_applicable_profile(topic)
+      return false unless profile
+      return false unless TzApproval.topic_approved_for_profile?(topic, profile)
+
+      allowed = profile.allowed_groups
+      approved_by_id = TzApproval.topic_approved_by_id_for_profile(topic, profile)
+
       is_staff? ||
         (allowed.present? && @user&.in_any_groups?(allowed)) ||
-        (@user&.id == topic.user_id && topic.tz_approved_by_id.to_i == @user&.id)
+        (@user&.id == topic.user_id && approved_by_id.to_i == @user&.id)
     end
 
     def ensure_can_unapprove_tz!(topic)
@@ -107,30 +318,67 @@ after_initialize do
   reloadable_patch { ::Guardian.prepend(TzApproval::GuardianExtensions) }
 
   # ── Сериализаторы ────────────────────────────────────────────────────────────
-  add_to_serializer(:topic_view, :tz_approved)     { object.topic.tz_approved? }
-  add_to_serializer(:topic_view, :tz_approved_by_id) { object.topic.tz_approved_by_id }
-  add_to_serializer(:topic_view, :tz_approved_at)  { object.topic.tz_approved_at }
-  add_to_serializer(:topic_view, :tz_approved_by_username) do
-    User.find_by(id: object.topic.tz_approved_by_id)&.username
+  %i[
+    approval_profile_key
+    approval_profile_prefix
+    approval_label
+    approval_icon
+    approval_approve_text
+    approval_unapprove_text
+    approval_approved_text
+    approval_approved_by_author_text
+    approved
+    approved_by_id
+    approved_at
+  ].each do |field|
+    add_to_serializer(:topic_view, field) do
+      TzApproval.profile_payload(object.topic, nil, include_username: false)[field]
+    end
+
+    add_to_serializer(:topic_list_item, field) do
+      TzApproval.profile_payload(object, nil, include_username: false)[field]
+    end
   end
-  add_to_serializer(:topic_view, :can_approve_tz)   { scope.can_approve_tz?(object.topic) }
+
+  add_to_serializer(:topic_view, :approved_by_username) do
+    TzApproval.profile_payload(object.topic, nil, include_username: true)[:approved_by_username]
+  end
+
+  add_to_serializer(:topic_view, :can_approve) do
+    TzApproval.profile_payload(object.topic, scope, include_username: false)[:can_approve]
+  end
+
+  add_to_serializer(:topic_view, :can_unapprove) do
+    TzApproval.profile_payload(object.topic, scope, include_username: false)[:can_unapprove]
+  end
+
+  add_to_serializer(:topic_view, :tz_approved) { TzApproval.tz_payload(object.topic)[:tz_approved] }
+  add_to_serializer(:topic_view, :tz_approved_by_id) do
+    TzApproval.tz_payload(object.topic)[:tz_approved_by_id]
+  end
+  add_to_serializer(:topic_view, :tz_approved_at) { TzApproval.tz_payload(object.topic)[:tz_approved_at] }
+  add_to_serializer(:topic_view, :tz_approved_by_username) do
+    TzApproval.tz_payload(object.topic)[:tz_approved_by_username]
+  end
+  add_to_serializer(:topic_view, :can_approve_tz) { scope.can_approve_tz?(object.topic) }
   add_to_serializer(:topic_view, :can_unapprove_tz) { scope.can_unapprove_tz?(object.topic) }
 
   add_to_serializer(:topic_list_item, :tz_approved) { object.tz_approved? }
 
   # ── Search filters ──────────────────────────────────────────────────────────
-  tz_applicable_search_filter = lambda do |posts|
+  profile_applicable_search_filter = lambda do |posts, profile|
     return posts.none unless SiteSetting.tz_approval_enabled
+    return posts.none unless profile&.enabled
 
     scoped_posts = posts.where.not(topics: { archetype: Archetype.private_message })
 
-    if TzApproval.category_binding_mode?
-      category_ids = SiteSetting.tz_approval_categories_map
+    if profile.binding_mode == TzApproval::CATEGORY_BINDING_MODE
+      category_ids = profile.categories
       return scoped_posts.none if category_ids.blank?
 
       scoped_posts.where(topics: { category_id: category_ids })
     else
-      tag_ids = Tag.where(name: TzApproval.approval_tags).pluck(:id)
+      tag_ids = Tag.where(name: profile.tags).pluck(:id)
       return scoped_posts.none if tag_ids.empty?
 
       scoped_posts.where(<<~SQL, tag_ids)
@@ -144,53 +392,76 @@ after_initialize do
     end
   end
 
-  tz_approved_search_filter = lambda do |posts|
-    tz_applicable_search_filter
-      .call(posts)
+  profile_approved_search_filter = lambda do |posts, profile|
+    profile_applicable_search_filter
+      .call(posts, profile)
       .joins(<<~SQL)
-        INNER JOIN topic_custom_fields tz_approval_approved_cf
-          ON tz_approval_approved_cf.topic_id = topics.id
-         AND tz_approval_approved_cf.name = 'tz_approved'
-         AND tz_approval_approved_cf.value = 't'
+        INNER JOIN topic_custom_fields #{profile.prefix}_approval_approved_cf
+          ON #{profile.prefix}_approval_approved_cf.topic_id = topics.id
+         AND #{profile.prefix}_approval_approved_cf.name = '#{TzApproval.approved_field(profile)}'
+         AND #{profile.prefix}_approval_approved_cf.value IN ('t', 'true', '1')
       SQL
   end
 
-  tz_unapproved_search_filter = lambda do |posts|
-    tz_applicable_search_filter
-      .call(posts)
+  profile_unapproved_search_filter = lambda do |posts, profile|
+    profile_applicable_search_filter
+      .call(posts, profile)
       .where(<<~SQL)
         NOT EXISTS (
           SELECT 1
-          FROM topic_custom_fields tz_approval_approved_cf
-          WHERE tz_approval_approved_cf.topic_id = topics.id
-            AND tz_approval_approved_cf.name = 'tz_approved'
-            AND tz_approval_approved_cf.value = 't'
+          FROM topic_custom_fields #{profile.prefix}_approval_approved_cf
+          WHERE #{profile.prefix}_approval_approved_cf.topic_id = topics.id
+            AND #{profile.prefix}_approval_approved_cf.name = '#{TzApproval.approved_field(profile)}'
+            AND #{profile.prefix}_approval_approved_cf.value IN ('t', 'true', '1')
         )
       SQL
   end
 
-  register_custom_filter_by_status("tz-approved", &tz_approved_search_filter)
-  register_custom_filter_by_status("tz-unapproved", &tz_unapproved_search_filter)
-  register_search_advanced_filter(/status:tz-approved/, &tz_approved_search_filter)
-  register_search_advanced_filter(/status:tz-unapproved/, &tz_unapproved_search_filter)
+  TzApproval.all_profiles.each do |registered_profile|
+    profile_key = registered_profile.key
+    status_slug = registered_profile.status_slug
+
+    register_custom_filter_by_status("#{status_slug}-approved") do |posts|
+      profile = TzApproval.all_profile_for_key(profile_key)
+      profile_approved_search_filter.call(posts, profile)
+    end
+
+    register_custom_filter_by_status("#{status_slug}-unapproved") do |posts|
+      profile = TzApproval.all_profile_for_key(profile_key)
+      profile_unapproved_search_filter.call(posts, profile)
+    end
+
+    register_search_advanced_filter(/status:#{Regexp.escape(status_slug)}-approved/) do |posts|
+      profile = TzApproval.all_profile_for_key(profile_key)
+      profile_approved_search_filter.call(posts, profile)
+    end
+
+    register_search_advanced_filter(/status:#{Regexp.escape(status_slug)}-unapproved/) do |posts|
+      profile = TzApproval.all_profile_for_key(profile_key)
+      profile_unapproved_search_filter.call(posts, profile)
+    end
+  end
 
   register_modifier(:topics_filter_options) do |results, _guardian|
-    results << {
-      name: "status:tz-approved",
-      description: I18n.t("tz_approval.filter.description.tz_approved"),
-      type: "text",
-    }
-    results << {
-      name: "status:tz-unapproved",
-      description: I18n.t("tz_approval.filter.description.tz_unapproved"),
-      type: "text",
-    }
+    TzApproval.profiles.each do |profile|
+      results << {
+        name: "status:#{profile.status_slug}-approved",
+        description: I18n.t("tz_approval.filter.description.approved", label: profile.label),
+        type: "text",
+      }
+      results << {
+        name: "status:#{profile.status_slug}-unapproved",
+        description: I18n.t("tz_approval.filter.description.unapproved", label: profile.label),
+        type: "text",
+      }
+    end
+
     results
   end
 
   # ── Routes ───────────────────────────────────────────────────────────────────
   Discourse::Application.routes.append do
-    post "/tz-approval/approve"   => "tz_approval/approvals#approve"
+    post "/tz-approval/approve" => "tz_approval/approvals#approve"
     post "/tz-approval/unapprove" => "tz_approval/approvals#unapprove"
   end
 end

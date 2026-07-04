@@ -3,44 +3,65 @@
 RSpec.describe TzApproval::ApprovalsController do
   fab!(:admin) { Fabricate(:admin) }
   fab!(:other_admin) { Fabricate(:admin) }
+  fab!(:user) { Fabricate(:user) }
+  fab!(:second_line_user) { Fabricate(:user) }
+  fab!(:topic_author) { Fabricate(:user) }
   fab!(:category) { Fabricate(:category) }
-  fab!(:topic) { Fabricate(:topic, category: category) }
+  fab!(:second_line_category) { Fabricate(:category) }
+  fab!(:topic) { Fabricate(:topic, category: category, user: topic_author) }
+  fab!(:second_line_topic) do
+    Fabricate(:topic, category: second_line_category, user: topic_author)
+  end
+  fab!(:tz_group) { Fabricate(:group) }
+  fab!(:second_line_group) { Fabricate(:group) }
 
   before do
     SiteSetting.tz_approval_binding_mode = "category"
     SiteSetting.tz_approval_categories = category.id.to_s
+    SiteSetting.tz_approval_allowed_groups = tz_group.id.to_s
+    SiteSetting.second_line_approval_enabled = true
+    SiteSetting.second_line_approval_categories = second_line_category.id.to_s
+    SiteSetting.second_line_approval_allowed_groups = second_line_group.id.to_s
+
+    GroupUser.create!(group: tz_group, user: user)
+    GroupUser.create!(group: second_line_group, user: second_line_user)
+
     sign_in(admin)
   end
 
-  def approve_topic
-    post "/tz-approval/approve.json", params: { topic_id: topic.id }
+  def approve_topic(target_topic = topic)
+    post "/tz-approval/approve.json", params: { topic_id: target_topic.id }
   end
 
-  def unapprove_topic
-    post "/tz-approval/unapprove.json", params: { topic_id: topic.id }
+  def unapprove_topic(target_topic = topic)
+    post "/tz-approval/unapprove.json", params: { topic_id: target_topic.id }
   end
 
-  def approval_posts
-    small_action_posts("tz_approved")
+  def approval_posts(target_topic = topic, action_code = "tz_approved")
+    small_action_posts(target_topic, action_code)
   end
 
-  def unapproval_posts
-    small_action_posts("tz_unapproved")
+  def unapproval_posts(target_topic = topic, action_code = "tz_unapproved")
+    small_action_posts(target_topic, action_code)
   end
 
-  def small_action_posts(action_code)
+  def small_action_posts(target_topic, action_code)
     Post.where(
-      topic_id:    topic.id,
-      post_type:   Post.types[:small_action],
+      topic_id: target_topic.id,
+      post_type: Post.types[:small_action],
       action_code: action_code,
     )
   end
 
-  def topic_user(user = admin)
-    TopicUser.find_by(user_id: user.id, topic_id: topic.id)
+  def topic_user(target_user = admin, target_topic = topic)
+    TopicUser.find_by(user_id: target_user.id, topic_id: target_topic.id)
   end
 
-  it "approves the topic and stores the approval status post id" do
+  def latest_notification
+    Notification.order(:id).last
+  end
+
+  it "approves the TZ topic and keeps the legacy custom fields and payload" do
     approve_topic
 
     expect(response.status).to eq(200)
@@ -49,10 +70,47 @@ RSpec.describe TzApproval::ApprovalsController do
     expect(topic.custom_fields["tz_approved"]).to eq(true)
     expect(topic.custom_fields["tz_approved_by_id"]).to eq(admin.id)
     expect(topic.custom_fields["tz_approved_at"]).to be_present
+    expect(response.parsed_body["approval_profile_key"]).to eq("tz")
+    expect(response.parsed_body["approval_profile_prefix"]).to eq("tz")
+    expect(response.parsed_body["approved"]).to eq(true)
+    expect(response.parsed_body["tz_approved"]).to eq(true)
 
     approval_post = approval_posts.first
     expect(approval_posts.count).to eq(1)
     expect(topic.custom_fields["tz_approval_post_id"].to_i).to eq(approval_post.id)
+    expect(approval_post.raw).to include("одобрил это ТЗ")
+  end
+
+  it "approves a second line topic with prefixed custom fields only" do
+    approve_topic(second_line_topic)
+
+    expect(response.status).to eq(200)
+
+    second_line_topic.reload
+    expect(second_line_topic.custom_fields["second_line_approved"]).to eq(true)
+    expect(second_line_topic.custom_fields["second_line_approved_by_id"]).to eq(admin.id)
+    expect(second_line_topic.custom_fields["second_line_approved_at"]).to be_present
+    expect(second_line_topic.custom_fields["tz_approved"]).to be_nil
+    expect(response.parsed_body["approval_profile_key"]).to eq("second_line")
+    expect(response.parsed_body["approval_profile_prefix"]).to eq("second_line")
+    expect(response.parsed_body["approval_approved_text"]).to eq("Вторая линия одобрена")
+    expect(response.parsed_body["tz_approved"]).to eq(false)
+
+    approval_post = approval_posts(second_line_topic, "second_line_approved").first
+    expect(approval_post.raw).to include("одобрил вторую линию")
+  end
+
+  it "uses separate allowed groups for each approval profile" do
+    sign_in(user)
+    approve_topic
+    expect(response.status).to eq(200)
+
+    approve_topic(second_line_topic)
+    expect(response.status).to eq(403)
+
+    sign_in(second_line_user)
+    approve_topic(second_line_topic)
+    expect(response.status).to eq(200)
   end
 
   it "does not create another approval post when the topic is already approved" do
@@ -66,6 +124,7 @@ RSpec.describe TzApproval::ApprovalsController do
 
     expect(response.status).to eq(200)
     expect(response.parsed_body["tz_approved"]).to eq(true)
+    expect(response.parsed_body["approved"]).to eq(true)
     expect(approval_posts.count).to eq(1)
   end
 
@@ -115,6 +174,7 @@ RSpec.describe TzApproval::ApprovalsController do
     expect(topic.custom_fields["tz_approved_by_id"]).to be_nil
     expect(topic.custom_fields["tz_approved_at"]).to be_nil
     expect(topic.custom_fields["tz_approval_post_id"]).to be_nil
+    expect(response.parsed_body["approved"]).to eq(false)
   end
 
   it "does not change notification level when approval is removed" do
@@ -131,5 +191,19 @@ RSpec.describe TzApproval::ApprovalsController do
 
     expect(response.status).to eq(200)
     expect(topic_user.notification_level).to eq(TopicUser.notification_levels[:regular])
+  end
+
+  it "stores profile data in author notifications" do
+    sign_in(second_line_user)
+
+    approve_topic(second_line_topic)
+
+    expect(response.status).to eq(200)
+    expect(latest_notification.notification_type).to eq(Notification.types[:tz_approval])
+
+    data = JSON.parse(latest_notification.data)
+    expect(data["profile_key"]).to eq("second_line")
+    expect(data["profile_prefix"]).to eq("second_line")
+    expect(data["profile_label"]).to eq("Вторая линия")
   end
 end

@@ -2,7 +2,7 @@ en:
   js:
     notifications:
       alt:
-        tz_approval: "TZ status changed"
+        tz_approval: "Approval status changed"
     tz_approval:
       approve: "Approve TZ"
       unapprove: "Unapprove TZ"
@@ -10,16 +10,43 @@ en:
       approved_by: "TZ approved — %{username}"
       approved_by_author: "TZ approved — Topic author"
       notification:
-        title: "TZ status changed"
-        approved_notification: "%{display_username} approved your TZ"
-        unapproved_notification: "%{display_username} unapproved your TZ"
-        approved_description: "TZ confirmed"
-        unapproved_description: "TZ confirmation removed"
+        title: "Approval status changed"
+        approved_notification: "%{display_username} changed the approval status"
+        unapproved_notification: "%{display_username} changed the approval status"
+        approved_description: "Status confirmed"
+        unapproved_description: "Confirmation removed"
+      profiles:
+        tz:
+          approve: "Approve TZ"
+          unapprove: "Unapprove TZ"
+          approved: "TZ approved"
+          unapproved: "TZ approval removed"
+          approved_by_author: "TZ approved — Topic author"
+          approved_description: "TZ confirmed"
+          unapproved_description: "TZ confirmation removed"
+          notification:
+            approved_notification: "%{display_username} approved your TZ"
+            unapproved_notification: "%{display_username} unapproved your TZ"
+        second_line:
+          approve: "Approve second line"
+          unapprove: "Unapprove second line"
+          approved: "Second line approved"
+          unapproved: "Second line approval removed"
+          approved_by_author: "Second line approved — Topic author"
+          approved_description: "Second line confirmed"
+          unapproved_description: "Second line confirmation removed"
+          notification:
+            approved_notification: "%{display_username} approved your second line"
+            unapproved_notification: "%{display_username} unapproved your second line"
     action_codes:
       tz_approved: "TZ approved"
       tz_unapproved: "TZ approval removed"
+      second_line_approved: "Second line approved"
+      second_line_unapproved: "Second line approval removed"
     search:
       advanced:
         statuses:
           tz_approved: "TZ approved"
           tz_unapproved: "TZ unapproved"
+          second_line_approved: "Second line approved"
+          second_line_unapproved: "Second line unapproved"
