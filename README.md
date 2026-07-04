@@ -113,6 +113,15 @@ POST /tz-approval/unapprove
 
 Для legacy-интеграций профиль ТЗ продолжает возвращать `tz_approved`, `tz_approved_by_id`, `tz_approved_at`, `can_approve_tz`, `can_unapprove_tz`.
 
+## n8n / Data Explorer
+
+Для workflow `topic-status/:topic_id` актуальные заготовки лежат в `n8n/`:
+
+- `topic-status-data-explorer.sql` — запрос Data Explorer, который возвращает одну строку на каждый enabled approval-профиль;
+- `topic-status-transform.js` — код n8n Code node, который собирает `approvals[]` и сохраняет legacy top-level `tz_*` поля.
+
+Пустые `TopicCustomField` не создаются заранее: отсутствие `<prefix>_approved` считается `approved: false`.
+
 ## Search
 
 Для ТЗ:

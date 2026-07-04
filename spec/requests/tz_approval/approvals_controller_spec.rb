@@ -117,6 +117,9 @@ RSpec.describe TzApproval::ApprovalsController do
     expect(response.parsed_body["tz_approved"]).to eq(false)
 
     approval_post = approval_posts(second_line_topic, "second_line_approved").first
+    expect(second_line_topic.custom_fields["second_line_approval_post_id"].to_i).to eq(
+      approval_post.id,
+    )
     expect(approval_post.raw).to include("одобрил вторую линию")
   end
 
