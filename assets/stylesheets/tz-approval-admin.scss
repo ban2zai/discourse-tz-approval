@@ -1,0 +1,93 @@
+.tz-approval-admin {
+  max-width: 1180px;
+
+  input,
+  select {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+.tz-approval-admin__header,
+.tz-approval-admin__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tz-approval-admin__layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.tz-approval-admin__list,
+.tz-approval-admin__form {
+  border: 1px solid var(--primary-low);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.tz-approval-admin__profile-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tz-approval-admin__profile-row[data-selected="true"] {
+  border-color: var(--tertiary);
+  background: var(--tertiary-low);
+}
+
+.tz-approval-admin__grid,
+.tz-approval-admin__texts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tz-approval-admin__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+
+  input {
+    width: auto;
+  }
+}
+
+.tz-approval-admin__selector {
+  margin-top: 16px;
+}
+
+.tz-approval-admin__options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.tz-approval-admin__message {
+  color: var(--success);
+}
+
+@media (max-width: 900px) {
+  .tz-approval-admin__layout,
+  .tz-approval-admin__grid,
+  .tz-approval-admin__texts,
+  .tz-approval-admin__options {
+    grid-template-columns: 1fr;
+  }
+}

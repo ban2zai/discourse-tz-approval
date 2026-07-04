@@ -19,9 +19,29 @@ RSpec.describe TzApproval::ApprovalsController do
     SiteSetting.tz_approval_binding_mode = "category"
     SiteSetting.tz_approval_categories = category.id.to_s
     SiteSetting.tz_approval_allowed_groups = tz_group.id.to_s
-    SiteSetting.second_line_approval_enabled = true
-    SiteSetting.second_line_approval_categories = second_line_category.id.to_s
-    SiteSetting.second_line_approval_allowed_groups = second_line_group.id.to_s
+
+    TzApproval::ProfileRecord.delete_all
+    TzApproval.ensure_default_profile!
+    TzApproval::ProfileRecord.create!(
+      key: "second_line",
+      prefix: "second_line",
+      label: "Вторая линия",
+      enabled: true,
+      priority: 200,
+      binding_mode: "category",
+      icon: "clipboard-check",
+      category_ids: [second_line_category.id],
+      allowed_group_ids: [second_line_group.id],
+      approve_text: "Одобрить вторую линию",
+      unapprove_text: "Снять одобрение второй линии",
+      approved_text: "Вторая линия одобрена",
+      unapproved_text: "Одобрение второй линии снято",
+      approved_by_author_text: "Вторая линия одобрена — Автор темы",
+      approved_action_text: "%{username} одобрил вторую линию",
+      unapproved_action_text: "%{username} снял одобрение второй линии",
+      approved_description: "Вторая линия подтверждена",
+      unapproved_description: "Одобрение второй линии снято",
+    )
 
     GroupUser.create!(group: tz_group, user: user)
     GroupUser.create!(group: second_line_group, user: second_line_user)
@@ -81,7 +101,7 @@ RSpec.describe TzApproval::ApprovalsController do
     expect(approval_post.raw).to include("одобрил это ТЗ")
   end
 
-  it "approves a second line topic with prefixed custom fields only" do
+  it "approves a dynamic profile topic with prefixed custom fields only" do
     approve_topic(second_line_topic)
 
     expect(response.status).to eq(200)
@@ -111,6 +131,19 @@ RSpec.describe TzApproval::ApprovalsController do
     sign_in(second_line_user)
     approve_topic(second_line_topic)
     expect(response.status).to eq(200)
+  end
+
+  it "uses priority when profile categories overlap" do
+    second_line_profile = TzApproval::ProfileRecord.find_by!(key: "second_line")
+    second_line_profile.update!(category_ids: [category.id], priority: 50)
+
+    approve_topic
+
+    expect(response.status).to eq(200)
+    expect(response.parsed_body["approval_profile_key"]).to eq("second_line")
+    topic.reload
+    expect(topic.custom_fields["second_line_approved"]).to eq(true)
+    expect(topic.custom_fields["tz_approved"]).to be_nil
   end
 
   it "does not create another approval post when the topic is already approved" do

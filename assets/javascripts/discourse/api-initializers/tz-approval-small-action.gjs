@@ -9,38 +9,36 @@ import { i18n } from "discourse-i18n";
 
 const DEFAULT_ICON = "file-signature";
 const ICON_REGEXP = /^[a-z0-9-]+$/;
-const PREFIX_REGEXP = /^[a-z0-9_]+$/;
 
 function safeIcon(icon) {
   return ICON_REGEXP.test(icon || "") ? icon : DEFAULT_ICON;
 }
 
-function safePrefix(prefix, fallback) {
-  const value = (prefix || "").toString().trim().toLowerCase().replace(/-/g, "_");
-  return PREFIX_REGEXP.test(value) ? value : fallback;
-}
-
 function approvalProfiles() {
-  const siteSettings = helperContext().siteSettings;
+  const context = helperContext();
+  const siteProfiles = context.site?.tz_approval_profiles;
+
+  if (siteProfiles?.length) {
+    return siteProfiles.map((profile) => ({
+      key: profile.key,
+      prefix: profile.prefix,
+      icon: safeIcon(profile.icon || DEFAULT_ICON),
+      approvedText: profile.approved_text,
+      unapprovedText: profile.unapproved_text,
+      approvedDescription: profile.approved_description,
+      unapprovedDescription: profile.unapproved_description,
+    }));
+  }
 
   return [
     {
       key: "tz",
-      prefix: safePrefix(siteSettings.tz_approval_prefix, "tz"),
-      icon: safeIcon(siteSettings.tz_approval_icon),
+      prefix: "tz",
+      icon: safeIcon(context.siteSettings.tz_approval_icon),
       approvedText: i18n("action_codes.tz_approved"),
       unapprovedText: i18n("action_codes.tz_unapproved"),
       approvedDescription: i18n("tz_approval.profiles.tz.approved_description"),
       unapprovedDescription: i18n("tz_approval.profiles.tz.unapproved_description"),
-    },
-    {
-      key: "second_line",
-      prefix: safePrefix(siteSettings.second_line_approval_prefix, "second_line"),
-      icon: safeIcon(siteSettings.second_line_approval_icon || "clipboard-check"),
-      approvedText: i18n("action_codes.second_line_approved"),
-      unapprovedText: i18n("action_codes.second_line_unapproved"),
-      approvedDescription: i18n("tz_approval.profiles.second_line.approved_description"),
-      unapprovedDescription: i18n("tz_approval.profiles.second_line.unapproved_description"),
     },
   ];
 }
@@ -95,8 +93,8 @@ export default apiInitializer((api) => {
           }
 
           return action === "unapproved"
-            ? i18n("tz_approval.notification.unapproved_description")
-            : i18n("tz_approval.notification.approved_description");
+            ? i18n("tz_approval.small_action.unapproved")
+            : i18n("tz_approval.small_action.approved");
         }
       };
     });
@@ -112,7 +110,9 @@ export default apiInitializer((api) => {
         const profile = profileForActionCode(this.args.code);
 
         if (!profile) {
-          return i18n(`action_codes.${this.args.code}`);
+          return isApprovedAction(this.args.code)
+            ? i18n("tz_approval.small_action.approved")
+            : i18n("tz_approval.small_action.unapproved");
         }
 
         return isApprovedAction(this.args.code) ? profile.approvedText : profile.unapprovedText;

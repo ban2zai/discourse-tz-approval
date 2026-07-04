@@ -33,7 +33,7 @@ module TzApproval
         post = create_tz_approval_status_post(
           topic,
           profile,
-          "approved_action",
+          profile.approved_action_text,
           TzApproval.approved_action_code(profile),
         )
         topic.custom_fields[TzApproval.approval_post_id_field(profile)] = post.id
@@ -78,7 +78,7 @@ module TzApproval
         post = create_tz_approval_status_post(
           topic,
           profile,
-          "unapproved_action",
+          profile.unapproved_action_text,
           TzApproval.unapproved_action_code(profile),
         )
         notify_topic_author(topic, profile, post, "unapproved")
@@ -100,14 +100,10 @@ module TzApproval
       )
     end
 
-    def create_tz_approval_status_post(topic, profile, translation_key, action_code)
+    def create_tz_approval_status_post(topic, profile, raw_template, action_code)
       PostCreator.create!(
         Discourse.system_user,
-        raw: I18n.t(
-          "tz_approval.profiles.#{profile.key}.#{translation_key}",
-          username: tz_approval_actor(topic),
-          label: profile.label,
-        ),
+        raw: format_profile_text(raw_template, topic, profile),
         topic_id: topic.id,
         post_type: Post.types[:small_action],
         action_code: action_code,
@@ -137,13 +133,19 @@ module TzApproval
           profile_key: profile.key,
           profile_prefix: profile.prefix,
           profile_label: profile.label,
-          description: TzApproval.profile_text(profile, "#{action}_description"),
-          message: "tz_approval.profiles.#{profile.key}.notification.#{action}_notification",
+          description: action == "unapproved" ? profile.unapproved_description : profile.approved_description,
+          message: action == "unapproved" ? profile.unapproved_description : profile.approved_description,
           title: "tz_approval.notification.title",
           display_username: current_user.username,
           topic_title: topic.title,
         }.to_json,
       )
+    end
+
+    def format_profile_text(template, topic, profile)
+      template.to_s
+        .gsub("%{username}", tz_approval_actor(topic))
+        .gsub("%{label}", profile.label.to_s)
     end
 
     def tz_approval_actor(topic)

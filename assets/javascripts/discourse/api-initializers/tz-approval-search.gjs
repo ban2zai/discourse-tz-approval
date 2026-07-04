@@ -1,30 +1,31 @@
 import { apiInitializer } from "discourse/lib/api";
+import { helperContext } from "discourse/lib/helpers";
 import { i18n } from "discourse-i18n";
 
 export default apiInitializer((api) => {
+  const profiles = helperContext().site?.tz_approval_profiles || [
+    {
+      status_slug: "tz",
+      approved_text: i18n("search.advanced.statuses.tz_approved"),
+      unapproved_text: i18n("search.advanced.statuses.tz_unapproved"),
+    },
+  ];
+
   api.addAdvancedSearchOptions({
-    statusOptions: [
+    statusOptions: profiles.flatMap((profile) => [
       {
-        name: i18n("search.advanced.statuses.tz_approved"),
-        value: "tz-approved",
+        name: profile.approved_text,
+        value: `${profile.status_slug}-approved`,
       },
       {
-        name: i18n("search.advanced.statuses.tz_unapproved"),
-        value: "tz-unapproved",
+        name: profile.unapproved_text,
+        value: `${profile.status_slug}-unapproved`,
       },
-      {
-        name: i18n("search.advanced.statuses.second_line_approved"),
-        value: "second-line-approved",
-      },
-      {
-        name: i18n("search.advanced.statuses.second_line_unapproved"),
-        value: "second-line-unapproved",
-      },
-    ],
+    ]),
   });
 
-  api.addSearchSuggestion("status:tz-approved");
-  api.addSearchSuggestion("status:tz-unapproved");
-  api.addSearchSuggestion("status:second-line-approved");
-  api.addSearchSuggestion("status:second-line-unapproved");
+  profiles.forEach((profile) => {
+    api.addSearchSuggestion(`status:${profile.status_slug}-approved`);
+    api.addSearchSuggestion(`status:${profile.status_slug}-unapproved`);
+  });
 });
