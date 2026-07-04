@@ -133,6 +133,20 @@ RSpec.describe TzApproval::ApprovalsController do
     expect(response.status).to eq(200)
   end
 
+  it "delays approval for topic authors even when they are in an approval group" do
+    SiteSetting.tz_author_approval_delay = 1.hour.to_i
+    GroupUser.create!(group: tz_group, user: topic_author)
+    sign_in(topic_author)
+
+    approve_topic
+    expect(response.status).to eq(403)
+
+    topic.update!(created_at: 2.hours.ago)
+
+    approve_topic
+    expect(response.status).to eq(200)
+  end
+
   it "uses priority when profile categories overlap" do
     second_line_profile = TzApproval::ProfileRecord.find_by!(key: "second_line")
     second_line_profile.update!(category_ids: [category.id], priority: 50)

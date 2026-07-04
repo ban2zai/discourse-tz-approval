@@ -28,6 +28,42 @@ module ::TzApproval
   DEFAULT_PROFILE_PREFIX = "tz"
   NOTIFICATION_TYPE_ID = 167
   PROFILE_PREFIX_REGEXP = /\A[a-z0-9_]+\z/
+  DEFAULT_PROFILE_TEXT_FIELDS = %i[
+    label
+    approve_text
+    unapprove_text
+    approved_text
+    unapproved_text
+    approved_by_author_text
+    approved_action_text
+    unapproved_action_text
+    approved_description
+    unapproved_description
+  ].freeze
+  RUSSIAN_DEFAULT_PROFILE_TEXTS = {
+    label: "ТЗ",
+    approve_text: "Одобрить ТЗ",
+    unapprove_text: "Снять одобрение",
+    approved_text: "ТЗ одобрено",
+    unapproved_text: "Одобрение ТЗ снято",
+    approved_by_author_text: "ТЗ одобрено — Автор темы",
+    approved_action_text: "%{username} одобрил это ТЗ",
+    unapproved_action_text: "%{username} снял одобрение с этого ТЗ",
+    approved_description: "ТЗ подтверждено",
+    unapproved_description: "ТЗ снято с подтверждения",
+  }.freeze
+  LEGACY_ENGLISH_DEFAULT_PROFILE_TEXTS = {
+    label: "TZ",
+    approve_text: "Approve TZ",
+    unapprove_text: "Unapprove TZ",
+    approved_text: "TZ approved",
+    unapproved_text: "TZ approval removed",
+    approved_by_author_text: "TZ approved — Topic author",
+    approved_action_text: "%{username} approved this TZ",
+    unapproved_action_text: "%{username} unapproved this TZ",
+    approved_description: "TZ confirmed",
+    unapproved_description: "TZ confirmation removed",
+  }.freeze
 
   Profile =
     Struct.new(
@@ -77,7 +113,7 @@ module ::TzApproval
     {
       key: DEFAULT_PROFILE_KEY,
       prefix: DEFAULT_PROFILE_PREFIX,
-      label: I18n.t("tz_approval.profiles.tz.label"),
+      label: RUSSIAN_DEFAULT_PROFILE_TEXTS[:label],
       enabled: true,
       priority: 100,
       binding_mode: SiteSetting.tz_approval_binding_mode.presence || TAG_BINDING_MODE,
@@ -85,16 +121,7 @@ module ::TzApproval
       category_ids: SiteSetting.tz_approval_categories_map,
       allowed_group_ids: SiteSetting.tz_approval_allowed_groups_map,
       tags: approval_tags,
-      approve_text: I18n.t("tz_approval.profiles.tz.approve"),
-      unapprove_text: I18n.t("tz_approval.profiles.tz.unapprove"),
-      approved_text: I18n.t("tz_approval.profiles.tz.approved"),
-      unapproved_text: I18n.t("tz_approval.profiles.tz.unapproved"),
-      approved_by_author_text: I18n.t("tz_approval.profiles.tz.approved_by_author"),
-      approved_action_text: I18n.t("tz_approval.profiles.tz.approved_action"),
-      unapproved_action_text: I18n.t("tz_approval.profiles.tz.unapproved_action"),
-      approved_description: I18n.t("tz_approval.profiles.tz.approved_description"),
-      unapproved_description: I18n.t("tz_approval.profiles.tz.unapproved_description"),
-    }
+    }.merge(RUSSIAN_DEFAULT_PROFILE_TEXTS.reject { |field, _value| field == :label })
   end
 
   def self.legacy_default_profile
@@ -126,9 +153,26 @@ module ::TzApproval
 
   def self.ensure_default_profile!
     return unless profiles_table_exists?
-    return if ProfileRecord.exists?(key: DEFAULT_PROFILE_KEY)
 
-    ProfileRecord.create!(default_profile_attributes)
+    profile = ProfileRecord.find_by(key: DEFAULT_PROFILE_KEY)
+
+    if profile
+      backfill_default_profile_texts!(profile)
+    else
+      ProfileRecord.create!(default_profile_attributes)
+    end
+  end
+
+  def self.backfill_default_profile_texts!(profile)
+    updates =
+      DEFAULT_PROFILE_TEXT_FIELDS.each_with_object({}) do |field, attrs|
+        value = profile.public_send(field)
+        next unless value.blank? || value == LEGACY_ENGLISH_DEFAULT_PROFILE_TEXTS[field]
+
+        attrs[field] = RUSSIAN_DEFAULT_PROFILE_TEXTS[field]
+      end
+
+    profile.update!(updates) if updates.present?
   end
 
   def self.all_profile_records
@@ -348,13 +392,13 @@ after_initialize do
       return false if TzApproval.topic_approved_for_profile?(topic, profile)
       return true if is_staff?
 
-      allowed = profile.allowed_groups.map(&:to_i)
-      return true if allowed.present? && @user&.in_any_groups?(allowed)
-
       if @user&.id == topic.user_id
         delay = SiteSetting.tz_author_approval_delay.to_i
         return Time.now.to_i - topic.created_at.to_i >= delay
       end
+
+      allowed = profile.allowed_groups.map(&:to_i)
+      return true if allowed.present? && @user&.in_any_groups?(allowed)
 
       false
     end

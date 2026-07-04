@@ -16,6 +16,53 @@ RSpec.describe TzApproval::ProfileRecord do
     expect(profile.binding_mode).to eq("category")
   end
 
+  it "backfills legacy English texts on the default TZ profile" do
+    described_class.create!(
+      key: "tz",
+      prefix: "tz",
+      label: "TZ",
+      enabled: true,
+      priority: 100,
+      binding_mode: "tag",
+      icon: "file-signature",
+      approve_text: "Approve TZ",
+      unapprove_text: "Unapprove TZ",
+      approved_text: "TZ approved",
+      unapproved_text: "TZ approval removed",
+      approved_by_author_text: "TZ approved — Topic author",
+      approved_action_text: "%{username} approved this TZ",
+      unapproved_action_text: "%{username} unapproved this TZ",
+      approved_description: "TZ confirmed",
+      unapproved_description: "TZ confirmation removed",
+    )
+
+    TzApproval.ensure_default_profile!
+
+    profile = described_class.find_by!(key: "tz")
+    expect(profile.label).to eq("ТЗ")
+    expect(profile.approve_text).to eq("Одобрить ТЗ")
+    expect(profile.approved_action_text).to eq("%{username} одобрил это ТЗ")
+  end
+
+  it "does not overwrite customized texts on the default TZ profile" do
+    described_class.create!(
+      key: "tz",
+      prefix: "tz",
+      label: "Мой профиль",
+      enabled: true,
+      priority: 100,
+      binding_mode: "tag",
+      icon: "file-signature",
+      approve_text: "Мой текст",
+    )
+
+    TzApproval.ensure_default_profile!
+
+    profile = described_class.find_by!(key: "tz")
+    expect(profile.label).to eq("Мой профиль")
+    expect(profile.approve_text).to eq("Мой текст")
+  end
+
   it "validates key and prefix format" do
     profile = described_class.new(key: "bad-prefix!", prefix: "bad-prefix!", label: "Bad")
 
