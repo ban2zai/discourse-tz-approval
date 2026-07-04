@@ -294,10 +294,11 @@ module ::TzApproval
 end
 
 require_relative "app/models/tz_approval/profile_record"
-require_relative "app/controllers/tz_approval/approvals_controller"
-require_relative "app/controllers/tz_approval/admin/profiles_controller"
 
 after_initialize do
+  require_relative "app/controllers/tz_approval/approvals_controller"
+  require_relative "app/controllers/tz_approval/admin/profiles_controller"
+
   Notification.types[:tz_approval] = TzApproval::NOTIFICATION_TYPE_ID
 
   # ── Custom fields ────────────────────────────────────────────────────────────
