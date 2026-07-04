@@ -42,4 +42,19 @@ RSpec.describe TzApproval::ProfileRecord do
     expect(profile).not_to be_valid
     expect(profile.errors[:enabled]).to be_present
   end
+
+  it "matches approval tags when topic list tags are plain strings" do
+    profile = TzApproval::Profile.new(enabled: true, binding_mode: "tag", tags: ["tz"])
+    topic = Struct.new(:tags).new(["tz"])
+
+    expect(TzApproval.topic_applicable_for_profile?(topic, profile)).to eq(true)
+  end
+
+  it "matches approval tags when topic tags are tag-like objects" do
+    profile = TzApproval::Profile.new(enabled: true, binding_mode: "tag", tags: ["tz"])
+    tag = Struct.new(:name).new("tz")
+    topic = Struct.new(:tags).new([tag])
+
+    expect(TzApproval.topic_applicable_for_profile?(topic, profile)).to eq(true)
+  end
 end

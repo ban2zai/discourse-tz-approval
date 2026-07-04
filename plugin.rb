@@ -163,7 +163,13 @@ module ::TzApproval
   end
 
   def self.topic_has_approval_tag?(topic, profile)
-    (topic.tags.map(&:name) & profile.tags.map(&:to_s)).present?
+    (topic_tag_names(topic) & profile.tags.map(&:to_s)).present?
+  end
+
+  def self.topic_tag_names(topic)
+    return [] unless topic.respond_to?(:tags)
+
+    Array(topic.tags).map { |tag| tag.respond_to?(:name) ? tag.name : tag.to_s }.reject(&:blank?)
   end
 
   def self.topic_in_approval_category?(topic, profile)
@@ -217,8 +223,10 @@ module ::TzApproval
   end
 
   def self.topic_custom_field(topic, field)
-    if topic.custom_fields.key?(field)
-      topic.custom_fields[field]
+    custom_fields = topic.custom_fields if topic.respond_to?(:custom_fields)
+
+    if custom_fields.respond_to?(:key?) && custom_fields.key?(field)
+      custom_fields[field]
     else
       TopicCustomField.find_by(topic_id: topic.id, name: field)&.value
     end
