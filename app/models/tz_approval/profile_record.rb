@@ -44,6 +44,7 @@ module TzApproval
         key: key,
         prefix: prefix,
         label: label,
+        priority: priority,
         categories: category_ids,
         allowed_groups: allowed_group_ids,
         icon: icon,

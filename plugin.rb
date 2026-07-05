@@ -7,6 +7,8 @@
 # url: https://github.com/ban2zai/discourse-tz-approval
 # enabled_site_setting: tz_approval_enabled
 
+require "digest"
+
 %w[
   circle-check
   clipboard-check
@@ -26,6 +28,9 @@ module ::TzApproval
   TAG_BINDING_MODE = "tag"
   DEFAULT_PROFILE_KEY = "tz"
   DEFAULT_PROFILE_PREFIX = "tz"
+  SECOND_LINE_PROFILE_PREFIX = "second_line"
+  GUID_FIELD_NAME = "discourse_new_topic_field_guid"
+  SOLVED_TABLE_NAME = "discourse_solved_solved_topics"
   NOTIFICATION_TYPE_ID = 167
   PROFILE_PREFIX_REGEXP = /\A[a-z0-9_]+\z/
   DEFAULT_PROFILE_TEXT_FIELDS = %i[
@@ -71,6 +76,7 @@ module ::TzApproval
       :key,
       :prefix,
       :label,
+      :priority,
       :categories,
       :allowed_groups,
       :icon,
@@ -132,6 +138,7 @@ module ::TzApproval
       key: attrs[:key],
       prefix: attrs[:prefix],
       label: attrs[:label],
+      priority: attrs[:priority],
       categories: attrs[:category_ids],
       allowed_groups: attrs[:allowed_group_ids],
       icon: attrs[:icon],
@@ -289,6 +296,154 @@ module ::TzApproval
     topic_custom_field(topic, approved_at_field(profile))
   end
 
+  def self.topic_guid(topic)
+    topic_custom_field(topic, GUID_FIELD_NAME)
+  end
+
+  def self.topic_for_guid(guid)
+    normalized_guid = guid.to_s.strip
+    return nil if normalized_guid.blank?
+
+    topic_id = TopicCustomField.where(name: GUID_FIELD_NAME, value: normalized_guid).pick(:topic_id)
+    Topic.find_by(id: topic_id) if topic_id
+  end
+
+  def self.status_token_valid?(token)
+    configured_token = SiteSetting.tz_approval_status_token.to_s
+    provided_token = token.to_s
+
+    return false if configured_token.blank? || provided_token.blank?
+
+    configured_digest = Digest::SHA256.hexdigest(configured_token)
+    provided_digest = Digest::SHA256.hexdigest(provided_token)
+
+    ActiveSupport::SecurityUtils.secure_compare(configured_digest, provided_digest)
+  end
+
+  def self.topic_status_payload(topic)
+    approvals = approval_profiles_status(topic)
+    tz_approval = approvals.find { |approval| approval[:profile_prefix] == DEFAULT_PROFILE_PREFIX }
+    second_line_approval =
+      approvals.find do |approval|
+        approval[:profile_prefix] == SECOND_LINE_PROFILE_PREFIX ||
+          approval[:profile_key] == SECOND_LINE_PROFILE_PREFIX
+      end
+    solution = solution_status(topic)
+
+    {
+      ok: true,
+      found: true,
+      topic_id: topic.id,
+      guid: topic_guid(topic),
+      is_tz: tz_approval&.dig(:is_applicable) || false,
+      tz_approved: tz_approval&.dig(:approved) || false,
+      tz_approved_by: approved_by_payload(tz_approval),
+      ss_approved: second_line_approval&.dig(:approved) || false,
+      ss_approved_by: approved_by_payload(second_line_approval),
+      approvals: approvals,
+      can_set_solution: solution[:can_set_solution],
+      has_solution: solution[:has_solution],
+      solution: solution[:solution],
+    }
+  end
+
+  def self.not_found_status_payload(topic_id: nil, guid: nil)
+    {
+      ok: true,
+      found: false,
+      topic_id: topic_id,
+      guid: guid,
+      approvals: [],
+    }
+  end
+
+  def self.approval_profiles_status(topic)
+    profiles.map do |profile|
+      approved_by_id = topic_approved_by_id_for_profile(topic, profile)
+      approved_user = User.find_by(id: approved_by_id)
+
+      {
+        profile_key: profile.key,
+        profile_prefix: profile.prefix,
+        profile_label: profile.label,
+        priority: profile.priority,
+        binding_mode: profile.binding_mode,
+        is_applicable: topic_applicable_for_profile?(topic, profile),
+        approved: topic_approved_for_profile?(topic, profile),
+        approved_by: {
+          id: approved_user&.id,
+          username: approved_user&.username,
+          at: topic_approved_at_for_profile(topic, profile),
+        },
+      }
+    end
+  end
+
+  def self.approved_by_payload(approval)
+    approved_by = approval&.dig(:approved_by) || {}
+
+    {
+      id: approved_by[:id],
+      username: approved_by[:username],
+      at: approved_by[:at],
+    }
+  end
+
+  def self.solution_status(topic)
+    solved_row = solved_topic_row(topic)
+    answer_post_id = solved_row&.dig("answer_post_id")
+    has_solution = answer_post_id.present?
+    solution_post = has_solution ? Post.find_by(id: answer_post_id) : nil
+    solution_marker = User.find_by(id: solved_row["accepter_user_id"]) if solved_row
+    solution_author = User.find_by(id: solution_post.user_id) if solution_post
+
+    {
+      can_set_solution: category_solved_enabled?(topic) && (has_solution || topic_has_reply?(topic)),
+      has_solution: has_solution,
+      solution: {
+        post_id: answer_post_id,
+        marked_at: solved_row&.dig("created_at"),
+        marked_by: {
+          id: solution_marker&.id,
+          username: solution_marker&.username,
+        },
+        post_author: {
+          id: solution_author&.id,
+          username: solution_author&.username,
+        },
+      },
+    }
+  end
+
+  def self.solved_topic_row(topic)
+    return nil unless ActiveRecord::Base.connection.data_source_exists?(SOLVED_TABLE_NAME)
+
+    ActiveRecord::Base.connection
+      .exec_query(<<~SQL)
+        SELECT answer_post_id, accepter_user_id, created_at
+        FROM #{SOLVED_TABLE_NAME}
+        WHERE topic_id = #{topic.id.to_i}
+        LIMIT 1
+      SQL
+      .first
+  rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
+    nil
+  end
+
+  def self.category_solved_enabled?(topic)
+    value =
+      CategoryCustomField.find_by(
+        category_id: topic.category_id,
+        name: "enable_accepted_answers",
+      )&.value
+
+    value == true || value == "true" || value == "t" || value == "1"
+  end
+
+  def self.topic_has_reply?(topic)
+    Post.where(topic_id: topic.id, deleted_at: nil).where("post_number > 1").exists?
+  end
+
   def self.profile_payload(topic, guardian = nil, include_username: true)
     profile = topic_applicable_profile(topic)
     payload = {
@@ -349,6 +504,7 @@ require_relative "app/models/tz_approval/profile_record"
 
 after_initialize do
   require_relative "app/controllers/tz_approval/approvals_controller"
+  require_relative "app/controllers/tz_approval/status_controller"
   require_relative "app/controllers/tz_approval/admin/profiles_controller"
 
   Notification.types[:tz_approval] = TzApproval::NOTIFICATION_TYPE_ID
@@ -594,6 +750,10 @@ after_initialize do
   Discourse::Application.routes.append do
     post "/tz-approval/approve" => "tz_approval/approvals#approve"
     post "/tz-approval/unapprove" => "tz_approval/approvals#unapprove"
+    get "/approvals/topic-id/:id/:token" => "tz_approval/status#show_by_topic_id",
+        defaults: { format: :json }
+    get "/approvals/guid/:guid/:token" => "tz_approval/status#show_by_guid",
+        defaults: { format: :json }
 
     get "/admin/plugins/tz-approval" => "admin/plugins#index", constraints: StaffConstraint.new
     get "/admin/plugins/tz-approval/profiles" => "tz_approval/admin/profiles#index",

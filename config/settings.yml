@@ -43,3 +43,7 @@ plugins:
     type: icon
     default: "file-signature"
     client: true
+
+  tz_approval_status_token:
+    type: string
+    default: ""

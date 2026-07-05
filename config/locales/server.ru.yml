@@ -6,6 +6,7 @@ ru:
     tz_approval_dark_color: "Цвет иконки и плашки одобрения в тёмной теме"
     tz_approval_icon: "Иконка дефолтного профиля ТЗ"
     tz_approval_categories: "Категории дефолтного профиля ТЗ в режиме привязки по категории"
+    tz_approval_status_token: "Токен server-to-server endpoint статусов одобрения. Используйте URL-safe значение без '/'. Пример вызова: /approvals/topic-id/123/<token> или /approvals/guid/<guid>/<token>"
   tz_approval:
     topic_author: "Автор темы"
     notification:
