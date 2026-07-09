@@ -6,14 +6,10 @@ RSpec.describe TzApproval::StatusController do
   fab!(:category) { Fabricate(:category) }
   fab!(:second_line_category) { Fabricate(:category) }
   fab!(:topic) { Fabricate(:topic, category: category, user: topic_author) }
-  fab!(:second_line_topic) do
-    Fabricate(:topic, category: second_line_category, user: topic_author)
-  end
   fab!(:tz_group) { Fabricate(:group) }
   fab!(:second_line_group) { Fabricate(:group) }
 
   let(:token) { "status-token-123" }
-  let(:guid) { "09abcfac-0e44-11f1-86e9-a94ec75f6b04" }
 
   before do
     SiteSetting.tz_approval_status_token = token
@@ -45,11 +41,6 @@ RSpec.describe TzApproval::StatusController do
     )
   end
 
-  def store_guid(target_topic = topic, value = guid)
-    target_topic.custom_fields[TzApproval::GUID_FIELD_NAME] = value
-    target_topic.save_custom_fields(true)
-  end
-
   def approve_profile(target_topic, prefix, user = admin)
     approved_at = Time.zone.parse("2026-07-04 10:00:00 UTC")
 
@@ -76,7 +67,6 @@ RSpec.describe TzApproval::StatusController do
   end
 
   it "returns n8n-compatible approval status by topic id" do
-    store_guid
     approve_profile(topic, "tz")
 
     get "/approvals/topic-id/#{topic.id}/#{token}.json"
@@ -87,7 +77,7 @@ RSpec.describe TzApproval::StatusController do
     expect(body["ok"]).to eq(true)
     expect(body["found"]).to eq(true)
     expect(body["topic_id"]).to eq(topic.id)
-    expect(body["guid"]).to eq(guid)
+    expect(body).not_to have_key("guid")
     expect(body["is_tz"]).to eq(true)
     expect(body["tz_approved"]).to eq(true)
     expect(body["tz_approved_by"]).to include(
@@ -124,26 +114,6 @@ RSpec.describe TzApproval::StatusController do
     )
   end
 
-  it "returns status by guid without requiring the GUID plugin constant" do
-    store_guid(second_line_topic)
-    approve_profile(second_line_topic, "second_line")
-
-    get "/approvals/guid/#{guid}/#{token}.json"
-
-    expect(response.status).to eq(200)
-
-    body = response.parsed_body
-    expect(body["found"]).to eq(true)
-    expect(body["topic_id"]).to eq(second_line_topic.id)
-    expect(body["guid"]).to eq(guid)
-    expect(body["ss_approved"]).to eq(true)
-    expect(body["ss_approved_by"]).to include(
-      "id" => admin.id,
-      "username" => admin.username,
-      "at" => "2026-07-04T10:00:00Z",
-    )
-  end
-
   it "returns found false for an unknown topic id" do
     get "/approvals/topic-id/999999/#{token}.json"
 
@@ -152,20 +122,6 @@ RSpec.describe TzApproval::StatusController do
       "ok" => true,
       "found" => false,
       "topic_id" => 999999,
-      "guid" => nil,
-      "approvals" => [],
-    )
-  end
-
-  it "returns found false for an unknown guid" do
-    get "/approvals/guid/missing-guid/#{token}.json"
-
-    expect(response.status).to eq(200)
-    expect(response.parsed_body).to include(
-      "ok" => true,
-      "found" => false,
-      "topic_id" => nil,
-      "guid" => "missing-guid",
       "approvals" => [],
     )
   end

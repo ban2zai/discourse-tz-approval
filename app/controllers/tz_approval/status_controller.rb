@@ -17,17 +17,6 @@ module TzApproval
       end
     end
 
-    def show_by_guid
-      guid = params[:guid].to_s.strip
-      topic = TzApproval.topic_for_guid(guid)
-
-      if topic
-        render json: TzApproval.topic_status_payload(topic)
-      else
-        render json: TzApproval.not_found_status_payload(guid: guid)
-      end
-    end
-
     private
 
     def ensure_valid_status_token

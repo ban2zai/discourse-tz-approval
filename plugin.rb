@@ -29,7 +29,6 @@ module ::TzApproval
   DEFAULT_PROFILE_KEY = "tz"
   DEFAULT_PROFILE_PREFIX = "tz"
   SECOND_LINE_PROFILE_PREFIX = "second_line"
-  GUID_FIELD_NAME = "discourse_new_topic_field_guid"
   SOLVED_TABLE_NAME = "discourse_solved_solved_topics"
   NOTIFICATION_TYPE_ID = 167
   PROFILE_PREFIX_REGEXP = /\A[a-z0-9_]+\z/
@@ -296,18 +295,6 @@ module ::TzApproval
     topic_custom_field(topic, approved_at_field(profile))
   end
 
-  def self.topic_guid(topic)
-    topic_custom_field(topic, GUID_FIELD_NAME)
-  end
-
-  def self.topic_for_guid(guid)
-    normalized_guid = guid.to_s.strip
-    return nil if normalized_guid.blank?
-
-    topic_id = TopicCustomField.where(name: GUID_FIELD_NAME, value: normalized_guid).pick(:topic_id)
-    Topic.find_by(id: topic_id) if topic_id
-  end
-
   def self.status_token_valid?(token)
     configured_token = SiteSetting.tz_approval_status_token.to_s
     provided_token = token.to_s
@@ -334,7 +321,6 @@ module ::TzApproval
       ok: true,
       found: true,
       topic_id: topic.id,
-      guid: topic_guid(topic),
       is_tz: tz_approval&.dig(:is_applicable) || false,
       tz_approved: tz_approval&.dig(:approved) || false,
       tz_approved_by: approved_by_payload(tz_approval),
@@ -347,12 +333,11 @@ module ::TzApproval
     }
   end
 
-  def self.not_found_status_payload(topic_id: nil, guid: nil)
+  def self.not_found_status_payload(topic_id: nil)
     {
       ok: true,
       found: false,
       topic_id: topic_id,
-      guid: guid,
       approvals: [],
     }
   end
@@ -751,8 +736,6 @@ after_initialize do
     post "/tz-approval/approve" => "tz_approval/approvals#approve"
     post "/tz-approval/unapprove" => "tz_approval/approvals#unapprove"
     get "/approvals/topic-id/:id/:token" => "tz_approval/status#show_by_topic_id",
-        defaults: { format: :json }
-    get "/approvals/guid/:guid/:token" => "tz_approval/status#show_by_guid",
         defaults: { format: :json }
 
     get "/admin/plugins/tz-approval" => "admin/plugins#index", constraints: StaffConstraint.new
