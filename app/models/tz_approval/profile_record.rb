@@ -11,6 +11,7 @@ module TzApproval
 
     before_validation :normalize_fields
     before_validation :set_default_texts
+    after_commit :clear_profiles_cache
 
     validates :key, :prefix, :label, :binding_mode, :icon, presence: true
     validates :key, :prefix, uniqueness: true
@@ -151,6 +152,10 @@ module TzApproval
       else
         item
       end
+    end
+
+    def clear_profiles_cache
+      TzApproval.clear_profiles_cache!
     end
   end
 end

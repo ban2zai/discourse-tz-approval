@@ -2,8 +2,6 @@ ru:
   site_settings:
     tz_approval_binding_mode: "Как seed-ить дефолтный профиль ТЗ: по тегу или по категории"
     tz_approval_tags: "Теги дефолтного профиля ТЗ в режиме привязки по тегу"
-    tz_approval_light_color: "Цвет иконки и плашки одобрения в светлой теме"
-    tz_approval_dark_color: "Цвет иконки и плашки одобрения в тёмной теме"
     tz_approval_icon: "Иконка дефолтного профиля ТЗ"
     tz_approval_categories: "Категории дефолтного профиля ТЗ в режиме привязки по категории"
     tz_approval_status_token: "Токен server-to-server endpoint статусов одобрения. Используйте URL-safe значение без '/'. Пример вызова: /approvals/topic-id/123/<token>"

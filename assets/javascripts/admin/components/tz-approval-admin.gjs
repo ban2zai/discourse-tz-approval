@@ -2,6 +2,7 @@ import Component from "@glimmer/component";
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
+import { service } from "@ember/service";
 import { tracked } from "@glimmer/tracking";
 import { ajax } from "discourse/lib/ajax";
 import { i18n } from "discourse-i18n";
@@ -15,7 +16,6 @@ const ICON_OPTIONS = [
   "square-check",
   "stamp",
   "user-plus",
-  
 ];
 
 const DEFAULT_PROFILE = {
@@ -51,6 +51,8 @@ function cloneProfile(profile = DEFAULT_PROFILE) {
 }
 
 export default class TzApprovalAdmin extends Component {
+  @service dialog;
+
   @tracked categories = [];
   @tracked categorySearch = "";
   @tracked dirty = false;
@@ -332,11 +334,18 @@ export default class TzApprovalAdmin extends Component {
   }
 
   @action
-  async deleteProfile() {
+  deleteProfile() {
     if (!this.canDelete) {
       return;
     }
 
+    this.dialog.deleteConfirm({
+      message: i18n("tz_approval.admin.delete_confirm"),
+      didConfirm: () => this.performDeleteProfile(),
+    });
+  }
+
+  async performDeleteProfile() {
     this.saving = true;
     this.saveError = null;
     this.saveMessage = null;
@@ -376,6 +385,8 @@ export default class TzApprovalAdmin extends Component {
       {{else if this.loadError}}
         <div class="alert alert-error">{{this.loadError}}</div>
       {{else}}
+        <div class="alert alert-info">{{i18n "tz_approval.admin.restart_notice"}}</div>
+
         <div class="tz-approval-admin__layout">
           <aside class="tz-approval-admin__list">
             <div class="tz-approval-admin__list-title">

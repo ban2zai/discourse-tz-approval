@@ -2,8 +2,6 @@ en:
   site_settings:
     tz_approval_binding_mode: "How the default TZ profile is seeded: by tag or by category"
     tz_approval_tags: "Default TZ profile tags when binding mode is tag"
-    tz_approval_light_color: "Approval icon and badge color in light theme"
-    tz_approval_dark_color: "Approval icon and badge color in dark theme"
     tz_approval_icon: "Default TZ profile icon"
     tz_approval_categories: "Default TZ profile categories when binding mode is category"
     tz_approval_status_token: "Server-to-server approval status endpoint token. Use a URL-safe value without '/'. Example: /approvals/topic-id/123/<token>"

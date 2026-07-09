@@ -20,9 +20,15 @@ module TzApproval
     private
 
     def ensure_valid_status_token
-      return if TzApproval.status_token_valid?(params[:token])
+      return if TzApproval.status_token_valid?(provided_status_token)
+
+      RateLimiter.new(nil, "tz-approval-status-#{request.remote_ip}", 20, 1.minute).performed!
 
       render json: { ok: false, error: "invalid_token" }, status: 403
+    end
+
+    def provided_status_token
+      request.headers["X-TZ-Approval-Token"].presence || params[:token].presence
     end
   end
 end

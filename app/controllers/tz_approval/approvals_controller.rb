@@ -13,6 +13,7 @@ module TzApproval
       guardian.ensure_can_approve_tz!(topic)
 
       approved_topic = nil
+      create_approval_event = false
 
       ActiveRecord::Base.transaction do
         topic = Topic.lock.find(topic.id)
@@ -29,18 +30,24 @@ module TzApproval
         topic.custom_fields[TzApproval.approved_field(profile)] = true
         topic.custom_fields[TzApproval.approved_by_id_field(profile)] = current_user.id
         topic.custom_fields[TzApproval.approved_at_field(profile)] = approved_at.iso8601
-
-        post = create_tz_approval_status_post(
-          topic,
-          profile,
-          profile.approved_action_text,
-          TzApproval.approved_action_code(profile),
-        )
-        topic.custom_fields[TzApproval.approval_post_id_field(profile)] = post.id
         topic.save_custom_fields(true)
-        notify_topic_author(topic, profile, post, "approved")
 
         approved_topic = topic
+        create_approval_event = true
+      end
+
+      if create_approval_event
+        post =
+          create_tz_approval_status_post(
+            approved_topic,
+            profile,
+            profile.approved_action_text,
+            TzApproval.approved_action_code(profile),
+          )
+
+        approved_topic.custom_fields[TzApproval.approval_post_id_field(profile)] = post.id
+        approved_topic.save_custom_fields(true)
+        notify_topic_author(approved_topic, profile, post, "approved")
       end
 
       set_current_user_to_watching(approved_topic)
@@ -57,6 +64,7 @@ module TzApproval
       guardian.ensure_can_unapprove_tz!(topic)
 
       unapproved_topic = nil
+      create_unapproval_event = false
 
       ActiveRecord::Base.transaction do
         topic = Topic.lock.find(topic.id)
@@ -75,15 +83,20 @@ module TzApproval
         topic.custom_fields[TzApproval.approval_post_id_field(profile)] = nil
         topic.save_custom_fields(true)
 
-        post = create_tz_approval_status_post(
-          topic,
-          profile,
-          profile.unapproved_action_text,
-          TzApproval.unapproved_action_code(profile),
-        )
-        notify_topic_author(topic, profile, post, "unapproved")
-
         unapproved_topic = topic
+        create_unapproval_event = true
+      end
+
+      if create_unapproval_event
+        post =
+          create_tz_approval_status_post(
+            unapproved_topic,
+            profile,
+            profile.unapproved_action_text,
+            TzApproval.unapproved_action_code(profile),
+          )
+
+        notify_topic_author(unapproved_topic, profile, post, "unapproved")
       end
 
       MessageBus.publish("/topic/#{unapproved_topic.id}", reload_topic: true, refresh_stream: true)

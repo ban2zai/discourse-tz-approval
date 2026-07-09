@@ -18,6 +18,7 @@ RSpec.describe TzApproval::StatusController do
     SiteSetting.tz_approval_allowed_groups = tz_group.id.to_s
 
     TzApproval::ProfileRecord.delete_all
+    TzApproval.clear_profiles_cache!
     TzApproval.ensure_default_profile!
     TzApproval::ProfileRecord.create!(
       key: "second_line",
@@ -112,6 +113,26 @@ RSpec.describe TzApproval::StatusController do
       "marked_by" => { "id" => nil, "username" => nil },
       "post_author" => { "id" => nil, "username" => nil },
     )
+  end
+
+  it "accepts the status token from a request header" do
+    approve_profile(topic, "tz")
+
+    get "/approvals/topic-id/#{topic.id}.json", headers: { "X-TZ-Approval-Token" => token }
+
+    expect(response.status).to eq(200)
+    expect(response.parsed_body["ok"]).to eq(true)
+    expect(response.parsed_body["topic_id"]).to eq(topic.id)
+  end
+
+  it "accepts the status token from a query parameter" do
+    approve_profile(topic, "tz")
+
+    get "/approvals/topic-id/#{topic.id}.json", params: { token: token }
+
+    expect(response.status).to eq(200)
+    expect(response.parsed_body["ok"]).to eq(true)
+    expect(response.parsed_body["topic_id"]).to eq(topic.id)
   end
 
   it "returns found false for an unknown topic id" do

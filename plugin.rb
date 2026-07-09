@@ -16,6 +16,7 @@ require "digest"
   file-signature
   stamp
   square-check
+  user-plus
 ].each { |icon| register_svg_icon icon }
 
 register_asset "stylesheets/tz-approval.scss"
@@ -30,6 +31,7 @@ module ::TzApproval
   DEFAULT_PROFILE_PREFIX = "tz"
   SECOND_LINE_PROFILE_PREFIX = "second_line"
   SOLVED_TABLE_NAME = "discourse_solved_solved_topics"
+  PROFILE_CACHE_KEY = "profiles"
   NOTIFICATION_TYPE_ID = 167
   PROFILE_PREFIX_REGEXP = /\A[a-z0-9_]+\z/
   DEFAULT_PROFILE_TEXT_FIELDS = %i[
@@ -109,9 +111,51 @@ module ::TzApproval
   end
 
   def self.profiles_table_exists?
-    ActiveRecord::Base.connection.data_source_exists?("tz_approval_profiles")
+    return @profiles_table_exists unless @profiles_table_exists.nil?
+
+    @profiles_table_exists = ActiveRecord::Base.connection.data_source_exists?("tz_approval_profiles")
   rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
     false
+  end
+
+  def self.profile_cache
+    @profile_cache ||= DistributedCache.new("tz_approval_profiles")
+  end
+
+  def self.clear_profiles_cache!
+    profile_cache.delete(PROFILE_CACHE_KEY)
+  end
+
+  def self.profile_record_cache_attributes(record)
+    record.as_json.except(:system)
+  end
+
+  def self.profile_from_cache_attributes(attrs)
+    attrs = attrs.with_indifferent_access
+
+    Profile.new(
+      id: attrs[:id],
+      key: attrs[:key],
+      prefix: attrs[:prefix],
+      label: attrs[:label],
+      priority: attrs[:priority],
+      categories: Array(attrs[:category_ids]),
+      allowed_groups: Array(attrs[:allowed_group_ids]),
+      icon: attrs[:icon],
+      enabled: SiteSetting.tz_approval_enabled && attrs[:enabled],
+      binding_mode: attrs[:binding_mode],
+      tags: Array(attrs[:tags]),
+      status_slug: attrs[:prefix].to_s.tr("_", "-"),
+      approve_text: attrs[:approve_text],
+      unapprove_text: attrs[:unapprove_text],
+      approved_text: attrs[:approved_text],
+      unapproved_text: attrs[:unapproved_text],
+      approved_by_author_text: attrs[:approved_by_author_text],
+      approved_action_text: attrs[:approved_action_text],
+      unapproved_action_text: attrs[:unapproved_action_text],
+      approved_description: attrs[:approved_description],
+      unapproved_description: attrs[:unapproved_description],
+    )
   end
 
   def self.default_profile_attributes
@@ -167,6 +211,14 @@ module ::TzApproval
     else
       ProfileRecord.create!(default_profile_attributes)
     end
+  rescue ActiveRecord::RecordNotUnique
+    ProfileRecord.find_by(key: DEFAULT_PROFILE_KEY)
+  end
+
+  def self.ensure_default_profile_safely!
+    ensure_default_profile!
+  rescue ActiveRecord::NoDatabaseError, ActiveRecord::ReadOnlyError, ActiveRecord::StatementInvalid => e
+    Rails.logger.warn("tz-approval: не удалось создать дефолтный профиль: #{e.class}: #{e.message}")
   end
 
   def self.backfill_default_profile_texts!(profile)
@@ -184,15 +236,25 @@ module ::TzApproval
   def self.all_profile_records
     return [] unless profiles_table_exists?
 
-    ensure_default_profile!
     ProfileRecord.ordered.to_a
   end
 
-  def self.all_profiles
-    records = all_profile_records
-    return [legacy_default_profile] if records.blank?
+  def self.all_profile_attributes
+    return [] unless profiles_table_exists?
 
-    records.map(&:to_profile)
+    cached = profile_cache[PROFILE_CACHE_KEY]
+    return cached if cached
+
+    ProfileRecord.ordered.map { |record| profile_record_cache_attributes(record) }.tap do |attrs|
+      profile_cache[PROFILE_CACHE_KEY] = attrs
+    end
+  end
+
+  def self.all_profiles
+    attrs = all_profile_attributes
+    return [legacy_default_profile] if attrs.blank?
+
+    attrs.map { |profile_attrs| profile_from_cache_attributes(profile_attrs) }
   end
 
   def self.profiles
@@ -403,13 +465,21 @@ module ::TzApproval
   def self.solved_topic_row(topic)
     return nil unless ActiveRecord::Base.connection.data_source_exists?(SOLVED_TABLE_NAME)
 
+    sql =
+      ActiveRecord::Base.sanitize_sql_array(
+        [
+          <<~SQL,
+            SELECT answer_post_id, accepter_user_id, created_at
+            FROM #{SOLVED_TABLE_NAME}
+            WHERE topic_id = ?
+            LIMIT 1
+          SQL
+          topic.id.to_i,
+        ],
+      )
+
     ActiveRecord::Base.connection
-      .exec_query(<<~SQL)
-        SELECT answer_post_id, accepter_user_id, created_at
-        FROM #{SOLVED_TABLE_NAME}
-        WHERE topic_id = #{topic.id.to_i}
-        LIMIT 1
-      SQL
+      .exec_query(sql)
       .first
   rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
     nil
@@ -461,7 +531,9 @@ module ::TzApproval
         approved_at: topic_approved_at_for_profile(topic, profile),
       )
 
-      payload[:approved_by_username] = User.find_by(id: approved_by_id)&.username if include_username
+      if include_username && approved_by_id.present?
+        payload[:approved_by_username] = User.find_by(id: approved_by_id)&.username
+      end
     end
 
     if guardian
@@ -480,7 +552,8 @@ module ::TzApproval
       tz_approved: topic_approved_for_profile?(topic, profile),
       tz_approved_by_id: approved_by_id,
       tz_approved_at: topic_approved_at_for_profile(topic, profile),
-      tz_approved_by_username: User.find_by(id: approved_by_id)&.username,
+      tz_approved_by_username:
+        approved_by_id.present? ? User.find_by(id: approved_by_id)&.username : nil,
     }
   end
 end
@@ -492,7 +565,19 @@ after_initialize do
   require_relative "app/controllers/tz_approval/status_controller"
   require_relative "app/controllers/tz_approval/admin/profiles_controller"
 
+  existing_notification_type =
+    Notification.types.find do |name, id|
+      id == TzApproval::NOTIFICATION_TYPE_ID && name.to_s != "tz_approval"
+    end
+
+  if existing_notification_type
+    Rails.logger.error(
+      "tz-approval: notification type id #{TzApproval::NOTIFICATION_TYPE_ID} уже занят #{existing_notification_type.first}",
+    )
+  end
+
   Notification.types[:tz_approval] = TzApproval::NOTIFICATION_TYPE_ID
+  TzApproval.ensure_default_profile_safely!
 
   # ── Custom fields ────────────────────────────────────────────────────────────
   TzApproval.all_profiles.each do |profile|
@@ -504,6 +589,19 @@ after_initialize do
     add_preloaded_topic_list_custom_field(TzApproval.approved_field(profile))
     add_preloaded_topic_list_custom_field(TzApproval.approved_by_id_field(profile))
     add_preloaded_topic_list_custom_field(TzApproval.approved_at_field(profile))
+  end
+
+  TopicList.on_preload do |topics, _topic_list|
+    fields =
+      TzApproval.profiles.flat_map do |profile|
+        [
+          TzApproval.approved_field(profile),
+          TzApproval.approved_by_id_field(profile),
+          TzApproval.approved_at_field(profile),
+        ]
+      end.uniq
+
+    Topic.preload_custom_fields(topics, fields) if topics.present? && fields.present?
   end
 
   # ── Геттеры на Topic ─────────────────────────────────────────────────────────
@@ -599,36 +697,60 @@ after_initialize do
     approved_at
   ].each do |field|
     add_to_serializer(:topic_view, field) do
-      TzApproval.profile_payload(object.topic, nil, include_username: false)[field]
+      @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+      @tz_approval_payload[field]
     end
 
     add_to_serializer(:topic_list_item, field) do
-      TzApproval.profile_payload(object, nil, include_username: false)[field]
+      @tz_approval_payload ||= TzApproval.profile_payload(object, nil, include_username: false)
+      @tz_approval_payload[field]
     end
   end
 
   add_to_serializer(:topic_view, :approved_by_username) do
-    TzApproval.profile_payload(object.topic, nil, include_username: true)[:approved_by_username]
+    @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+    @tz_approval_payload[:approved_by_username]
   end
 
   add_to_serializer(:topic_view, :can_approve) do
-    TzApproval.profile_payload(object.topic, scope, include_username: false)[:can_approve]
+    @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+    @tz_approval_payload[:can_approve]
   end
 
   add_to_serializer(:topic_view, :can_unapprove) do
-    TzApproval.profile_payload(object.topic, scope, include_username: false)[:can_unapprove]
+    @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+    @tz_approval_payload[:can_unapprove]
   end
 
-  add_to_serializer(:topic_view, :tz_approved) { TzApproval.tz_payload(object.topic)[:tz_approved] }
+  add_to_serializer(:topic_view, :tz_approved) do
+    @tz_approval_legacy_payload ||= TzApproval.tz_payload(object.topic)
+    @tz_approval_legacy_payload[:tz_approved]
+  end
+
   add_to_serializer(:topic_view, :tz_approved_by_id) do
-    TzApproval.tz_payload(object.topic)[:tz_approved_by_id]
+    @tz_approval_legacy_payload ||= TzApproval.tz_payload(object.topic)
+    @tz_approval_legacy_payload[:tz_approved_by_id]
   end
-  add_to_serializer(:topic_view, :tz_approved_at) { TzApproval.tz_payload(object.topic)[:tz_approved_at] }
+
+  add_to_serializer(:topic_view, :tz_approved_at) do
+    @tz_approval_legacy_payload ||= TzApproval.tz_payload(object.topic)
+    @tz_approval_legacy_payload[:tz_approved_at]
+  end
+
   add_to_serializer(:topic_view, :tz_approved_by_username) do
-    TzApproval.tz_payload(object.topic)[:tz_approved_by_username]
+    @tz_approval_legacy_payload ||= TzApproval.tz_payload(object.topic)
+    @tz_approval_legacy_payload[:tz_approved_by_username]
   end
-  add_to_serializer(:topic_view, :can_approve_tz) { scope.can_approve_tz?(object.topic) }
-  add_to_serializer(:topic_view, :can_unapprove_tz) { scope.can_unapprove_tz?(object.topic) }
+
+  add_to_serializer(:topic_view, :can_approve_tz) do
+    @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+    @tz_approval_payload[:can_approve]
+  end
+
+  add_to_serializer(:topic_view, :can_unapprove_tz) do
+    @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+    @tz_approval_payload[:can_unapprove]
+  end
 
   add_to_serializer(:topic_list_item, :tz_approved) { object.tz_approved? }
 
@@ -660,26 +782,36 @@ after_initialize do
   end
 
   profile_approved_search_filter = lambda do |posts, profile|
+    return posts.none unless profile&.prefix.to_s.match?(TzApproval::PROFILE_PREFIX_REGEXP)
+
+    approval_cf_alias = "tz_approval_#{profile.prefix}_approved_cf"
+    approved_field = ActiveRecord::Base.connection.quote(TzApproval.approved_field(profile))
+
     profile_applicable_search_filter
       .call(posts, profile)
       .joins(<<~SQL)
-        INNER JOIN topic_custom_fields #{profile.prefix}_approval_approved_cf
-          ON #{profile.prefix}_approval_approved_cf.topic_id = topics.id
-         AND #{profile.prefix}_approval_approved_cf.name = '#{TzApproval.approved_field(profile)}'
-         AND #{profile.prefix}_approval_approved_cf.value IN ('t', 'true', '1')
+        INNER JOIN topic_custom_fields #{approval_cf_alias}
+          ON #{approval_cf_alias}.topic_id = topics.id
+         AND #{approval_cf_alias}.name = #{approved_field}
+         AND #{approval_cf_alias}.value IN ('t', 'true', '1')
       SQL
   end
 
   profile_unapproved_search_filter = lambda do |posts, profile|
+    return posts.none unless profile&.prefix.to_s.match?(TzApproval::PROFILE_PREFIX_REGEXP)
+
+    approval_cf_alias = "tz_approval_#{profile.prefix}_approved_cf"
+    approved_field = ActiveRecord::Base.connection.quote(TzApproval.approved_field(profile))
+
     profile_applicable_search_filter
       .call(posts, profile)
       .where(<<~SQL)
         NOT EXISTS (
           SELECT 1
-          FROM topic_custom_fields #{profile.prefix}_approval_approved_cf
-          WHERE #{profile.prefix}_approval_approved_cf.topic_id = topics.id
-            AND #{profile.prefix}_approval_approved_cf.name = '#{TzApproval.approved_field(profile)}'
-            AND #{profile.prefix}_approval_approved_cf.value IN ('t', 'true', '1')
+          FROM topic_custom_fields #{approval_cf_alias}
+          WHERE #{approval_cf_alias}.topic_id = topics.id
+            AND #{approval_cf_alias}.name = #{approved_field}
+            AND #{approval_cf_alias}.value IN ('t', 'true', '1')
         )
       SQL
   end
@@ -736,6 +868,8 @@ after_initialize do
     post "/tz-approval/approve" => "tz_approval/approvals#approve"
     post "/tz-approval/unapprove" => "tz_approval/approvals#unapprove"
     get "/approvals/topic-id/:id/:token" => "tz_approval/status#show_by_topic_id",
+        defaults: { format: :json }
+    get "/approvals/topic-id/:id" => "tz_approval/status#show_by_topic_id",
         defaults: { format: :json }
 
     get "/admin/plugins/tz-approval" => "admin/plugins#index", constraints: StaffConstraint.new

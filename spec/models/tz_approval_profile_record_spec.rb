@@ -3,6 +3,7 @@
 RSpec.describe TzApproval::ProfileRecord do
   before do
     described_class.delete_all
+    TzApproval.clear_profiles_cache!
   end
 
   it "creates the default TZ profile from legacy settings" do
@@ -88,6 +89,35 @@ RSpec.describe TzApproval::ProfileRecord do
 
     expect(profile).not_to be_valid
     expect(profile.errors[:enabled]).to be_present
+  end
+
+  it "does not seed the default profile while reading profiles" do
+    expect { TzApproval.all_profiles }.not_to change { described_class.count }
+    expect(TzApproval.all_profiles.first.key).to eq("tz")
+  end
+
+  it "invalidates cached profiles after profile changes" do
+    profile = described_class.create!(key: "line", prefix: "line", label: "Line")
+
+    expect(TzApproval.all_profile_for_key("line").label).to eq("Line")
+
+    profile.update!(label: "Updated line")
+    expect(TzApproval.all_profile_for_key("line").label).to eq("Updated line")
+
+    profile.destroy!
+    expect(TzApproval.all_profile_for_key("line")).to be_nil
+  end
+
+  it "applies the global enabled setting outside the cached profile attributes" do
+    described_class.create!(key: "line", prefix: "line", label: "Line", enabled: true)
+
+    expect(TzApproval.all_profile_for_key("line").enabled).to eq(true)
+
+    SiteSetting.tz_approval_enabled = false
+
+    expect(TzApproval.all_profile_for_key("line").enabled).to eq(false)
+  ensure
+    SiteSetting.tz_approval_enabled = true
   end
 
   it "matches approval tags when topic list tags are plain strings" do

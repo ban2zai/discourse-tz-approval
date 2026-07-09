@@ -21,6 +21,7 @@ RSpec.describe TzApproval::ApprovalsController do
     SiteSetting.tz_approval_allowed_groups = tz_group.id.to_s
 
     TzApproval::ProfileRecord.delete_all
+    TzApproval.clear_profiles_cache!
     TzApproval.ensure_default_profile!
     TzApproval::ProfileRecord.create!(
       key: "second_line",

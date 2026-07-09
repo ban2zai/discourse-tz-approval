@@ -8,6 +8,7 @@ RSpec.describe TzApproval::Admin::ProfilesController do
 
   before do
     TzApproval::ProfileRecord.delete_all
+    TzApproval.clear_profiles_cache!
   end
 
   def valid_profile_params

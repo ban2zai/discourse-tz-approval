@@ -2,6 +2,7 @@ import { apiInitializer } from "discourse/lib/api";
 import { helperContext } from "discourse/lib/helpers";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
+import { i18n } from "discourse-i18n";
 
 const DEFAULT_ICON = "file-signature";
 const ICON_REGEXP = /^[a-z0-9-]+$/;
@@ -104,8 +105,8 @@ export default apiInitializer((api) => {
 
     translatedLabel() {
       return isApproved(this.topic)
-        ? this.topic.approval_unapprove_text || I18n.t("tz_approval.unapprove")
-        : this.topic.approval_approve_text || I18n.t("tz_approval.approve");
+        ? this.topic.approval_unapprove_text || i18n("tz_approval.unapprove")
+        : this.topic.approval_approve_text || i18n("tz_approval.approve");
     },
 
     classNames() {
