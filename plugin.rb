@@ -592,7 +592,7 @@ after_initialize do
   end
 
   TopicList.on_preload do |topics, _topic_list|
-    fields =
+    approval_fields =
       TzApproval.profiles.flat_map do |profile|
         [
           TzApproval.approved_field(profile),
@@ -600,6 +600,13 @@ after_initialize do
           TzApproval.approved_at_field(profile),
         ]
       end.uniq
+
+    existing_fields =
+      topics.flat_map do |topic|
+        topic.preloaded_custom_fields&.keys || []
+      end
+
+    fields = (existing_fields + approval_fields).uniq
 
     Topic.preload_custom_fields(topics, fields) if topics.present? && fields.present?
   end
