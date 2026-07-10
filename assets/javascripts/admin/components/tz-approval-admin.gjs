@@ -36,6 +36,8 @@ const DEFAULT_PROFILE = {
   approved_by_author_text: "",
   approved_action_text: "",
   unapproved_action_text: "",
+  author_locked_action_text: "",
+  author_unlocked_action_text: "",
   approved_description: "",
   unapproved_description: "",
 };
@@ -657,6 +659,24 @@ export default class TzApprovalAdmin extends Component {
                     value={{this.draft.unapproved_action_text}}
                     placeholder={{i18n "tz_approval.admin.placeholders.unapproved_action_text"}}
                     {{on "input" (fn this.updateField "unapproved_action_text")}}
+                  />
+                </label>
+
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.author_locked_action_text"}}</span>
+                  <input
+                    value={{this.draft.author_locked_action_text}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.author_locked_action_text"}}
+                    {{on "input" (fn this.updateField "author_locked_action_text")}}
+                  />
+                </label>
+
+                <label>
+                  <span>{{i18n "tz_approval.admin.fields.author_unlocked_action_text"}}</span>
+                  <input
+                    value={{this.draft.author_unlocked_action_text}}
+                    placeholder={{i18n "tz_approval.admin.placeholders.author_unlocked_action_text"}}
+                    {{on "input" (fn this.updateField "author_unlocked_action_text")}}
                   />
                 </label>
 

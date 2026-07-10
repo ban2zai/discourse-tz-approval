@@ -97,11 +97,13 @@ RSpec.describe TzApproval::StatusController do
       "binding_mode" => "category",
       "is_applicable" => true,
       "approved" => true,
+      "author_approval_locked" => false,
     )
     expect(second_line_approval).to include(
       "profile_key" => "second_line",
       "is_applicable" => false,
       "approved" => false,
+      "author_approval_locked" => false,
     )
     expect(body["ss_approved"]).to eq(false)
     expect(body["ss_approved_by"]).to include("id" => nil, "username" => nil, "at" => nil)
@@ -112,6 +114,27 @@ RSpec.describe TzApproval::StatusController do
       "marked_at" => nil,
       "marked_by" => { "id" => nil, "username" => nil },
       "post_author" => { "id" => nil, "username" => nil },
+    )
+  end
+
+  it "adds author lock state only inside profile approvals" do
+    topic.custom_fields["tz_author_approval_locked"] = true
+    topic.save_custom_fields(true)
+
+    get "/approvals/topic-id/#{topic.id}/#{token}.json"
+
+    expect(response.status).to eq(200)
+    body = response.parsed_body
+    tz_approval = body["approvals"].find { |approval| approval["profile_prefix"] == "tz" }
+
+    expect(tz_approval["author_approval_locked"]).to eq(true)
+    expect(body).not_to have_key("author_approval_locked")
+    expect(body).to include(
+      "is_tz" => true,
+      "tz_approved" => false,
+      "ss_approved" => false,
+      "can_set_solution" => false,
+      "has_solution" => false,
     )
   end
 

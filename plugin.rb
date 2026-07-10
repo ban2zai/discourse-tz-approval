@@ -16,6 +16,8 @@ require "digest"
   file-signature
   stamp
   square-check
+  lock-open
+  user-lock
   user-plus
 ].each { |icon| register_svg_icon icon }
 
@@ -32,7 +34,7 @@ module ::TzApproval
   SS_PROFILE_PREFIX = "ss"
   SECOND_LINE_PROFILE_PREFIX = "second_line"
   SOLVED_TABLE_NAME = "discourse_solved_solved_topics"
-  PROFILE_CACHE_KEY = "profiles"
+  PROFILE_CACHE_KEY = "profiles_v2"
   NOTIFICATION_TYPE_ID = 167
   PROFILE_PREFIX_REGEXP = /\A[a-z0-9_]+\z/
   DEFAULT_PROFILE_TEXT_FIELDS = %i[
@@ -44,6 +46,8 @@ module ::TzApproval
     approved_by_author_text
     approved_action_text
     unapproved_action_text
+    author_locked_action_text
+    author_unlocked_action_text
     approved_description
     unapproved_description
   ].freeze
@@ -56,6 +60,8 @@ module ::TzApproval
     approved_by_author_text: "ТЗ одобрено — Автор темы",
     approved_action_text: "%{username} одобрил это ТЗ",
     unapproved_action_text: "%{username} снял одобрение с этого ТЗ",
+    author_locked_action_text: "%{username} запретил автору самостоятельно одобрять %{label}",
+    author_unlocked_action_text: "%{username} разрешил автору самостоятельно одобрять %{label}",
     approved_description: "ТЗ подтверждено",
     unapproved_description: "ТЗ снято с подтверждения",
   }.freeze
@@ -93,6 +99,8 @@ module ::TzApproval
       :approved_by_author_text,
       :approved_action_text,
       :unapproved_action_text,
+      :author_locked_action_text,
+      :author_unlocked_action_text,
       :approved_description,
       :unapproved_description,
       keyword_init: true,
@@ -154,6 +162,8 @@ module ::TzApproval
       approved_by_author_text: attrs[:approved_by_author_text],
       approved_action_text: attrs[:approved_action_text],
       unapproved_action_text: attrs[:unapproved_action_text],
+      author_locked_action_text: attrs[:author_locked_action_text],
+      author_unlocked_action_text: attrs[:author_unlocked_action_text],
       approved_description: attrs[:approved_description],
       unapproved_description: attrs[:unapproved_description],
     )
@@ -197,6 +207,8 @@ module ::TzApproval
       approved_by_author_text: attrs[:approved_by_author_text],
       approved_action_text: attrs[:approved_action_text],
       unapproved_action_text: attrs[:unapproved_action_text],
+      author_locked_action_text: attrs[:author_locked_action_text],
+      author_unlocked_action_text: attrs[:author_unlocked_action_text],
       approved_description: attrs[:approved_description],
       unapproved_description: attrs[:unapproved_description],
     )
@@ -327,12 +339,36 @@ module ::TzApproval
     field_name(profile, "approval_post_id")
   end
 
+  def self.author_locked_field(profile)
+    field_name(profile, "author_approval_locked")
+  end
+
+  def self.author_locked_by_id_field(profile)
+    field_name(profile, "author_approval_locked_by_id")
+  end
+
+  def self.author_locked_at_field(profile)
+    field_name(profile, "author_approval_locked_at")
+  end
+
+  def self.author_lock_post_id_field(profile)
+    field_name(profile, "author_approval_lock_post_id")
+  end
+
   def self.approved_action_code(profile)
     field_name(profile, "approved")
   end
 
   def self.unapproved_action_code(profile)
     field_name(profile, "unapproved")
+  end
+
+  def self.author_locked_action_code(profile)
+    field_name(profile, "author_locked")
+  end
+
+  def self.author_unlocked_action_code(profile)
+    field_name(profile, "author_unlocked")
   end
 
   def self.topic_custom_field(topic, field)
@@ -356,6 +392,19 @@ module ::TzApproval
 
   def self.topic_approved_at_for_profile(topic, profile)
     topic_custom_field(topic, approved_at_field(profile))
+  end
+
+  def self.topic_author_locked_for_profile?(topic, profile)
+    value = topic_custom_field(topic, author_locked_field(profile))
+    value == true || value == "true" || value == "t" || value == "1"
+  end
+
+  def self.topic_author_locked_by_id_for_profile(topic, profile)
+    topic_custom_field(topic, author_locked_by_id_field(profile))
+  end
+
+  def self.topic_author_locked_at_for_profile(topic, profile)
+    topic_custom_field(topic, author_locked_at_field(profile))
   end
 
   def self.status_token_valid?(token)
@@ -420,6 +469,7 @@ module ::TzApproval
         binding_mode: profile.binding_mode,
         is_applicable: topic_applicable_for_profile?(topic, profile),
         approved: topic_approved_for_profile?(topic, profile),
+        author_approval_locked: topic_author_locked_for_profile?(topic, profile),
         approved_by: {
           id: approved_user&.id,
           username: approved_user&.username,
@@ -502,7 +552,7 @@ module ::TzApproval
     Post.where(topic_id: topic.id, deleted_at: nil).where("post_number > 1").exists?
   end
 
-  def self.profile_payload(topic, guardian = nil, include_username: true)
+  def self.profile_payload(topic, guardian = nil, include_username: true, include_lock: false)
     profile = topic_applicable_profile(topic)
     payload = {
       approval_profile_key: nil,
@@ -518,8 +568,17 @@ module ::TzApproval
       approved_at: nil,
     }
 
+    if include_lock
+      payload.merge!(
+        author_approval_locked: false,
+        author_approval_locked_by_id: nil,
+        author_approval_locked_at: nil,
+      )
+    end
+
     if profile
       approved_by_id = topic_approved_by_id_for_profile(topic, profile)
+      locked_by_id = topic_author_locked_by_id_for_profile(topic, profile) if include_lock
       payload.merge!(
         approval_profile_key: profile.key,
         approval_profile_prefix: profile.prefix,
@@ -534,14 +593,30 @@ module ::TzApproval
         approved_at: topic_approved_at_for_profile(topic, profile),
       )
 
+      if include_lock
+        payload.merge!(
+          author_approval_locked: topic_author_locked_for_profile?(topic, profile),
+          author_approval_locked_by_id: locked_by_id,
+          author_approval_locked_at: topic_author_locked_at_for_profile(topic, profile),
+        )
+      end
+
       if include_username && approved_by_id.present?
         payload[:approved_by_username] = User.find_by(id: approved_by_id)&.username
+      end
+
+      if include_lock && include_username && locked_by_id.present?
+        payload[:author_approval_locked_by_username] = User.find_by(id: locked_by_id)&.username
       end
     end
 
     if guardian
       payload[:can_approve] = guardian.can_approve_tz?(topic)
       payload[:can_unapprove] = guardian.can_unapprove_tz?(topic)
+      if include_lock
+        payload[:can_lock_author_approval] = guardian.can_lock_tz_author_approval?(topic)
+        payload[:can_unlock_author_approval] = guardian.can_unlock_tz_author_approval?(topic)
+      end
     end
 
     payload
@@ -588,6 +663,10 @@ after_initialize do
     register_topic_custom_field_type(TzApproval.approved_by_id_field(profile), :integer)
     register_topic_custom_field_type(TzApproval.approved_at_field(profile), :string)
     register_topic_custom_field_type(TzApproval.approval_post_id_field(profile), :integer)
+    register_topic_custom_field_type(TzApproval.author_locked_field(profile), :boolean)
+    register_topic_custom_field_type(TzApproval.author_locked_by_id_field(profile), :integer)
+    register_topic_custom_field_type(TzApproval.author_locked_at_field(profile), :string)
+    register_topic_custom_field_type(TzApproval.author_lock_post_id_field(profile), :integer)
 
     add_preloaded_topic_list_custom_field(TzApproval.approved_field(profile))
     add_preloaded_topic_list_custom_field(TzApproval.approved_by_id_field(profile))
@@ -639,6 +718,9 @@ after_initialize do
       profile = TzApproval.topic_applicable_profile(topic)
       return false unless profile
       return false if TzApproval.topic_approved_for_profile?(topic, profile)
+      if @user&.id == topic.user_id && TzApproval.topic_author_locked_for_profile?(topic, profile)
+        return false
+      end
       return true if is_staff?
 
       if @user&.id == topic.user_id
@@ -671,6 +753,41 @@ after_initialize do
 
     def ensure_can_unapprove_tz!(topic)
       raise Discourse::InvalidAccess.new unless can_unapprove_tz?(topic)
+    end
+
+    def can_manage_tz_author_approval_lock?(topic)
+      profile = TzApproval.topic_applicable_profile(topic)
+      return false unless profile
+      return false unless @user
+      return false if @user.id == topic.user_id
+      return true if is_staff?
+
+      allowed = profile.allowed_groups.map(&:to_i)
+      allowed.present? && !!@user.in_any_groups?(allowed)
+    end
+
+    def can_lock_tz_author_approval?(topic)
+      profile = TzApproval.topic_applicable_profile(topic)
+      return false unless profile
+      return false unless can_manage_tz_author_approval_lock?(topic)
+
+      !TzApproval.topic_author_locked_for_profile?(topic, profile)
+    end
+
+    def can_unlock_tz_author_approval?(topic)
+      profile = TzApproval.topic_applicable_profile(topic)
+      return false unless profile
+      return false unless can_manage_tz_author_approval_lock?(topic)
+
+      TzApproval.topic_author_locked_for_profile?(topic, profile)
+    end
+
+    def ensure_can_lock_tz_author_approval!(topic)
+      raise Discourse::InvalidAccess.new unless can_manage_tz_author_approval_lock?(topic)
+    end
+
+    def ensure_can_unlock_tz_author_approval!(topic)
+      raise Discourse::InvalidAccess.new unless can_manage_tz_author_approval_lock?(topic)
     end
   end
 
@@ -707,7 +824,8 @@ after_initialize do
     approved_at
   ].each do |field|
     add_to_serializer(:topic_view, field) do
-      @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+      @tz_approval_payload ||=
+        TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
       @tz_approval_payload[field]
     end
 
@@ -718,18 +836,36 @@ after_initialize do
   end
 
   add_to_serializer(:topic_view, :approved_by_username) do
-    @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+    @tz_approval_payload ||=
+      TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
     @tz_approval_payload[:approved_by_username]
   end
 
   add_to_serializer(:topic_view, :can_approve) do
-    @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+    @tz_approval_payload ||=
+      TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
     @tz_approval_payload[:can_approve]
   end
 
   add_to_serializer(:topic_view, :can_unapprove) do
-    @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+    @tz_approval_payload ||=
+      TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
     @tz_approval_payload[:can_unapprove]
+  end
+
+  %i[
+    author_approval_locked
+    author_approval_locked_by_id
+    author_approval_locked_by_username
+    author_approval_locked_at
+    can_lock_author_approval
+    can_unlock_author_approval
+  ].each do |field|
+    add_to_serializer(:topic_view, field) do
+      @tz_approval_payload ||=
+        TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
+      @tz_approval_payload[field]
+    end
   end
 
   add_to_serializer(:topic_view, :tz_approved) do
@@ -753,12 +889,14 @@ after_initialize do
   end
 
   add_to_serializer(:topic_view, :can_approve_tz) do
-    @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+    @tz_approval_payload ||=
+      TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
     @tz_approval_payload[:can_approve]
   end
 
   add_to_serializer(:topic_view, :can_unapprove_tz) do
-    @tz_approval_payload ||= TzApproval.profile_payload(object.topic, scope, include_username: true)
+    @tz_approval_payload ||=
+      TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
     @tz_approval_payload[:can_unapprove]
   end
 
@@ -877,6 +1015,8 @@ after_initialize do
   Discourse::Application.routes.append do
     post "/tz-approval/approve" => "tz_approval/approvals#approve"
     post "/tz-approval/unapprove" => "tz_approval/approvals#unapprove"
+    post "/tz-approval/lock-author-approval" => "tz_approval/approvals#lock_author_approval"
+    post "/tz-approval/unlock-author-approval" => "tz_approval/approvals#unlock_author_approval"
     get "/approvals/topic-id/:id/:token" => "tz_approval/status#show_by_topic_id",
         defaults: { format: :json }
     get "/approvals/topic-id/:id" => "tz_approval/status#show_by_topic_id",

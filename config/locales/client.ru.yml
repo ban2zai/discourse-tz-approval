@@ -6,12 +6,16 @@ ru:
     tz_approval:
       approve: "Одобрить ТЗ"
       unapprove: "Снять одобрение"
+      lock_author_approval: "Запретить самоодобрение"
+      unlock_author_approval: "Разрешить самоодобрение"
       approved: "ТЗ одобрено"
       approved_by: "ТЗ одобрено — %{username}"
       approved_by_author: "ТЗ одобрено — Автор темы"
       small_action:
         approved: "Одобрено"
         unapproved: "Одобрение снято"
+        author_locked: "Самоодобрение автором запрещено"
+        author_unlocked: "Самоодобрение автором разрешено"
       notification:
         title: "Статус одобрения изменен"
         approved_notification: "%{display_username} изменил статус одобрения"
@@ -77,6 +81,8 @@ ru:
           approved_by_author_text: "Плашка, если одобрил автор темы"
           approved_action_text: "Системное сообщение при одобрении"
           unapproved_action_text: "Системное сообщение при снятии"
+          author_locked_action_text: "Системное сообщение при запрете самоодобрения"
+          author_unlocked_action_text: "Системное сообщение при снятии запрета"
           approved_description: "Описание уведомления при одобрении"
           unapproved_description: "Описание уведомления при снятии"
         placeholders:
@@ -90,11 +96,15 @@ ru:
           approved_by_author_text: "ТЗ одобрено — Автор темы"
           approved_action_text: "Пользователь одобрил это ТЗ"
           unapproved_action_text: "Пользователь снял одобрение с этого ТЗ"
+          author_locked_action_text: "Пользователь запретил автору самостоятельно одобрять ТЗ"
+          author_unlocked_action_text: "Пользователь разрешил автору самостоятельно одобрять ТЗ"
           approved_description: "ТЗ подтверждено"
           unapproved_description: "ТЗ снято с подтверждения"
     action_codes:
       tz_approved: "ТЗ одобрено"
       tz_unapproved: "Одобрение ТЗ снято"
+      tz_author_locked: "Самоодобрение автором запрещено"
+      tz_author_unlocked: "Самоодобрение автором разрешено"
     search:
       advanced:
         statuses:

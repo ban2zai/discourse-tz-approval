@@ -30,6 +30,8 @@ RSpec.describe TzApproval::Admin::ProfilesController do
       approved_by_author_text: "Вторая линия одобрена — Автор темы",
       approved_action_text: "%{username} одобрил вторую линию",
       unapproved_action_text: "%{username} снял одобрение второй линии",
+      author_locked_action_text: "%{username} запретил самоодобрение второй линии",
+      author_unlocked_action_text: "%{username} разрешил самоодобрение второй линии",
       approved_description: "Вторая линия подтверждена",
       unapproved_description: "Одобрение второй линии снято",
     }
@@ -59,6 +61,10 @@ RSpec.describe TzApproval::Admin::ProfilesController do
 
     post "/admin/plugins/tz-approval/profiles.json", params: { profile: valid_profile_params }
     expect(response.status).to eq(200)
+    expect(response.parsed_body["profile"]).to include(
+      "author_locked_action_text" => "%{username} запретил самоодобрение второй линии",
+      "author_unlocked_action_text" => "%{username} разрешил самоодобрение второй линии",
+    )
 
     profile_id = response.parsed_body["profile"]["id"]
 
@@ -70,6 +76,9 @@ RSpec.describe TzApproval::Admin::ProfilesController do
     expect(response.status).to eq(200)
     expect(response.parsed_body["profile"]["label"]).to eq("Вторая линия форума")
     expect(response.parsed_body["profile"]["prefix"]).to eq("second_line")
+    expect(response.parsed_body["profile"]["author_locked_action_text"]).to eq(
+      "%{username} запретил самоодобрение второй линии",
+    )
 
     delete "/admin/plugins/tz-approval/profiles/#{profile_id}.json"
 

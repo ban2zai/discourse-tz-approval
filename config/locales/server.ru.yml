@@ -11,9 +11,13 @@ ru:
       title: "Статус одобрения изменен"
       approved_notification: "%{display_username} изменил статус одобрения"
       unapproved_notification: "%{display_username} изменил статус одобрения"
+      author_locked_description: "Автору запрещено самостоятельно одобрять %{label}"
+      author_unlocked_description: "Автору снова разрешено самостоятельно одобрять %{label}"
     small_action:
       approved: "Одобрено"
       unapproved: "Одобрение снято"
+      author_locked: "Самоодобрение автором запрещено"
+      author_unlocked: "Самоодобрение автором разрешено"
     profiles:
       tz:
         label: "ТЗ"
@@ -71,6 +75,8 @@ ru:
         approved_by_author_text: "Плашка, если одобрил автор темы"
         approved_action_text: "Системное сообщение при одобрении"
         unapproved_action_text: "Системное сообщение при снятии"
+        author_locked_action_text: "Системное сообщение при запрете самоодобрения"
+        author_unlocked_action_text: "Системное сообщение при снятии запрета"
         approved_description: "Описание уведомления при одобрении"
         unapproved_description: "Описание уведомления при снятии"
       placeholders:
@@ -84,6 +90,8 @@ ru:
         approved_by_author_text: "ТЗ одобрено — Автор темы"
         approved_action_text: "Пользователь одобрил это ТЗ"
         unapproved_action_text: "Пользователь снял одобрение с этого ТЗ"
+        author_locked_action_text: "Пользователь запретил автору самостоятельно одобрять ТЗ"
+        author_unlocked_action_text: "Пользователь разрешил автору самостоятельно одобрять ТЗ"
         approved_description: "ТЗ подтверждено"
         unapproved_description: "ТЗ снято с подтверждения"
       errors:

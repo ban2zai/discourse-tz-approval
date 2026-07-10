@@ -11,9 +11,13 @@ en:
       title: "Approval status changed"
       approved_notification: "%{display_username} changed the approval status"
       unapproved_notification: "%{display_username} changed the approval status"
+      author_locked_description: "The author is not allowed to approve %{label} themselves"
+      author_unlocked_description: "The author is allowed to approve %{label} themselves again"
     small_action:
       approved: "Approved"
       unapproved: "Approval removed"
+      author_locked: "Author self-approval disabled"
+      author_unlocked: "Author self-approval enabled"
     profiles:
       tz:
         label: "TZ"
@@ -71,6 +75,8 @@ en:
         approved_by_author_text: "Badge when topic author approved"
         approved_action_text: "System message on approval"
         unapproved_action_text: "System message on removal"
+        author_locked_action_text: "System message when self-approval is disabled"
+        author_unlocked_action_text: "System message when self-approval is enabled"
         approved_description: "Notification description on approval"
         unapproved_description: "Notification description on removal"
       placeholders:
@@ -84,6 +90,8 @@ en:
         approved_by_author_text: "TZ approved — Topic author"
         approved_action_text: "User approved this TZ"
         unapproved_action_text: "User removed approval from this TZ"
+        author_locked_action_text: "User prevented the author from approving this TZ"
+        author_unlocked_action_text: "User allowed the author to approve this TZ"
         approved_description: "TZ confirmed"
         unapproved_description: "TZ confirmation removed"
       errors:

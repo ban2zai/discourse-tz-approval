@@ -15,6 +15,23 @@ RSpec.describe TzApproval::ProfileRecord do
     expect(profile.prefix).to eq("tz")
     expect(profile.label).to eq("ТЗ")
     expect(profile.binding_mode).to eq("category")
+    expect(profile.author_locked_action_text).to eq(
+      "%{username} запретил автору самостоятельно одобрять %{label}",
+    )
+    expect(profile.author_unlocked_action_text).to eq(
+      "%{username} разрешил автору самостоятельно одобрять %{label}",
+    )
+  end
+
+  it "fills author lock texts for a minimally configured profile" do
+    profile = described_class.create!(key: "line", prefix: "line", label: "Линия")
+
+    expect(profile.author_locked_action_text).to eq(
+      "%{username} запретил автору самостоятельно одобрять Линия",
+    )
+    expect(profile.author_unlocked_action_text).to eq(
+      "%{username} разрешил автору самостоятельно одобрять Линия",
+    )
   end
 
   it "backfills legacy English texts on the default TZ profile" do
@@ -62,6 +79,43 @@ RSpec.describe TzApproval::ProfileRecord do
     profile = described_class.find_by!(key: "tz")
     expect(profile.label).to eq("Мой профиль")
     expect(profile.approve_text).to eq("Мой текст")
+  end
+
+  it "backfills blank author lock texts on the default profile" do
+    TzApproval.ensure_default_profile!
+    profile = described_class.find_by!(key: "tz")
+    profile.update_columns(author_locked_action_text: "", author_unlocked_action_text: "")
+    TzApproval.clear_profiles_cache!
+
+    TzApproval.ensure_default_profile!
+
+    profile.reload
+    expect(profile.author_locked_action_text).to eq(
+      TzApproval::RUSSIAN_DEFAULT_PROFILE_TEXTS[:author_locked_action_text],
+    )
+    expect(profile.author_unlocked_action_text).to eq(
+      TzApproval::RUSSIAN_DEFAULT_PROFILE_TEXTS[:author_unlocked_action_text],
+    )
+  end
+
+  it "exposes author lock texts through JSON, profile structs, and cache" do
+    profile =
+      described_class.create!(
+        key: "line",
+        prefix: "line",
+        label: "Линия",
+        author_locked_action_text: "LOCK %{label}",
+        author_unlocked_action_text: "UNLOCK %{label}",
+      )
+
+    expect(profile.as_json).to include(
+      author_locked_action_text: "LOCK %{label}",
+      author_unlocked_action_text: "UNLOCK %{label}",
+    )
+    expect(profile.to_profile.author_locked_action_text).to eq("LOCK %{label}")
+    expect(TzApproval.all_profile_for_key("line").author_unlocked_action_text).to eq(
+      "UNLOCK %{label}",
+    )
   end
 
   it "validates key and prefix format" do

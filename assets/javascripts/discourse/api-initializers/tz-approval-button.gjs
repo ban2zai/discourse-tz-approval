@@ -28,6 +28,12 @@ const APPROVAL_FIELDS = [
   "tz_approved_at",
   "can_approve_tz",
   "can_unapprove_tz",
+  "author_approval_locked",
+  "author_approval_locked_by_id",
+  "author_approval_locked_by_username",
+  "author_approval_locked_at",
+  "can_lock_author_approval",
+  "can_unlock_author_approval",
 ];
 
 function safeIcon(icon) {
@@ -157,6 +163,75 @@ export default apiInitializer((api) => {
 
       try {
         const result = await ajax(endpoint, { type: "POST", data: { topic_id: topic.id } });
+        syncApprovalState(topic, result);
+      } catch (e) {
+        syncApprovalState(topic, previousState);
+        popupAjaxError(e);
+      }
+    },
+  });
+
+  api.registerTopicFooterButton({
+    id: "tz-approval-author-lock",
+    icon() {
+      return this.topic.author_approval_locked ? "lock-open" : "user-lock";
+    },
+    priority: 240,
+    dependentKeys: [
+      "topic.author_approval_locked",
+      "topic.can_lock_author_approval",
+      "topic.can_unlock_author_approval",
+    ],
+
+    displayed() {
+      return (
+        !!this.topic.can_lock_author_approval ||
+        !!this.topic.can_unlock_author_approval
+      );
+    },
+
+    translatedLabel() {
+      return this.topic.author_approval_locked
+        ? i18n("tz_approval.unlock_author_approval")
+        : i18n("tz_approval.lock_author_approval");
+    },
+
+    classNames() {
+      return this.topic.author_approval_locked
+        ? ["tz-approval-author-lock-button", "btn-danger"]
+        : ["tz-approval-author-lock-button"];
+    },
+
+    async action() {
+      const topic = this.topic;
+      const currentUser = api.getCurrentUser();
+      const currentlyLocked = !!topic.author_approval_locked;
+      const endpoint = currentlyLocked
+        ? "/tz-approval/unlock-author-approval"
+        : "/tz-approval/lock-author-approval";
+
+      const previousState = Object.fromEntries(
+        APPROVAL_FIELDS.map((field) => [field, topic[field]])
+      );
+
+      syncApprovalState(topic, {
+        author_approval_locked: !currentlyLocked,
+        author_approval_locked_by_id: currentlyLocked ? null : currentUser?.id,
+        author_approval_locked_by_username: currentlyLocked
+          ? null
+          : currentUser?.username,
+        author_approval_locked_at: currentlyLocked
+          ? null
+          : new Date().toISOString(),
+        can_lock_author_approval: currentlyLocked,
+        can_unlock_author_approval: !currentlyLocked,
+      });
+
+      try {
+        const result = await ajax(endpoint, {
+          type: "POST",
+          data: { topic_id: topic.id },
+        });
         syncApprovalState(topic, result);
       } catch (e) {
         syncApprovalState(topic, previousState);

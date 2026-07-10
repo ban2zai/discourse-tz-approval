@@ -58,11 +58,27 @@ RSpec.describe TzApproval::ApprovalsController do
     post "/tz-approval/unapprove.json", params: { topic_id: target_topic.id }
   end
 
+  def lock_author_approval(target_topic = topic)
+    post "/tz-approval/lock-author-approval.json", params: { topic_id: target_topic.id }
+  end
+
+  def unlock_author_approval(target_topic = topic)
+    post "/tz-approval/unlock-author-approval.json", params: { topic_id: target_topic.id }
+  end
+
   def approval_posts(target_topic = topic, action_code = "tz_approved")
     small_action_posts(target_topic, action_code)
   end
 
   def unapproval_posts(target_topic = topic, action_code = "tz_unapproved")
+    small_action_posts(target_topic, action_code)
+  end
+
+  def author_lock_posts(target_topic = topic, action_code = "tz_author_locked")
+    small_action_posts(target_topic, action_code)
+  end
+
+  def author_unlock_posts(target_topic = topic, action_code = "tz_author_unlocked")
     small_action_posts(target_topic, action_code)
   end
 
@@ -256,5 +272,198 @@ RSpec.describe TzApproval::ApprovalsController do
     expect(data["profile_key"]).to eq("second_line")
     expect(data["profile_prefix"]).to eq("second_line")
     expect(data["profile_label"]).to eq("Вторая линия")
+  end
+
+  describe "author approval lock" do
+    it "rejects anonymous users and users outside the approval group" do
+      sign_out
+      lock_author_approval
+      expect(response.status).to eq(403)
+
+      sign_in(Fabricate(:user))
+      lock_author_approval
+      expect(response.status).to eq(403)
+    end
+
+    it "never lets the topic author manage their own lock" do
+      sign_in(topic_author)
+      lock_author_approval
+      expect(response.status).to eq(403)
+
+      GroupUser.create!(group: tz_group, user: topic_author)
+      lock_author_approval
+      expect(response.status).to eq(403)
+
+      admin_topic = Fabricate(:topic, category: category, user: admin)
+      sign_in(admin)
+      lock_author_approval(admin_topic)
+      expect(response.status).to eq(403)
+
+      unlock_author_approval(admin_topic)
+      expect(response.status).to eq(403)
+    end
+
+    it "locks author approval and creates one status post and notification" do
+      sign_in(user)
+
+      lock_author_approval
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to include(
+        "author_approval_locked" => true,
+        "author_approval_locked_by_id" => user.id,
+        "author_approval_locked_by_username" => user.username,
+        "can_lock_author_approval" => false,
+        "can_unlock_author_approval" => true,
+      )
+
+      topic.reload
+      expect(topic.custom_fields["tz_author_approval_locked"]).to eq(true)
+      expect(topic.custom_fields["tz_author_approval_locked_by_id"]).to eq(user.id)
+      expect(topic.custom_fields["tz_author_approval_locked_at"]).to be_present
+
+      lock_post = author_lock_posts.first
+      expect(author_lock_posts.count).to eq(1)
+      expect(topic.custom_fields["tz_author_approval_lock_post_id"].to_i).to eq(lock_post.id)
+      expect(lock_post.raw).to include("запретил автору самостоятельно одобрять")
+
+      expect(latest_notification.notification_type).to eq(Notification.types[:tz_approval])
+      notification_data = JSON.parse(latest_notification.data)
+      expect(notification_data["action"]).to eq("author_locked")
+      expect(notification_data["description"]).to eq(
+        "Автору запрещено самостоятельно одобрять ТЗ",
+      )
+    end
+
+    it "uses the active profile prefix for lock fields and posts" do
+      sign_in(second_line_user)
+
+      lock_author_approval(second_line_topic)
+
+      expect(response.status).to eq(200)
+      second_line_topic.reload
+      expect(second_line_topic.custom_fields["second_line_author_approval_locked"]).to eq(true)
+      expect(second_line_topic.custom_fields["tz_author_approval_locked"]).to be_nil
+      expect(author_lock_posts(second_line_topic, "second_line_author_locked").count).to eq(1)
+    end
+
+    it "keeps repeated lock requests idempotent for authorized users" do
+      sign_in(user)
+
+      2.times do
+        lock_author_approval
+        expect(response.status).to eq(200)
+      end
+
+      expect(author_lock_posts.count).to eq(1)
+      expect(
+        Notification.where(
+          user_id: topic_author.id,
+          notification_type: Notification.types[:tz_approval],
+        ).count,
+      ).to eq(1)
+    end
+
+    it "unlocks as staff, clears fields, and preserves the historical lock post" do
+      sign_in(user)
+      lock_author_approval
+      expect(response.status).to eq(200)
+      lock_post = author_lock_posts.first
+
+      sign_in(admin)
+      unlock_author_approval
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to include(
+        "author_approval_locked" => false,
+        "can_lock_author_approval" => true,
+        "can_unlock_author_approval" => false,
+      )
+
+      topic.reload
+      expect(topic.custom_fields["tz_author_approval_locked"]).to be_nil
+      expect(topic.custom_fields["tz_author_approval_locked_by_id"]).to be_nil
+      expect(topic.custom_fields["tz_author_approval_locked_at"]).to be_nil
+      expect(topic.custom_fields["tz_author_approval_lock_post_id"]).to be_nil
+      expect(lock_post.reload.deleted_at).to be_nil
+      expect(author_unlock_posts.count).to eq(1)
+
+      notification_data = JSON.parse(latest_notification.data)
+      expect(notification_data["action"]).to eq("author_unlocked")
+      expect(notification_data["description"]).to eq(
+        "Автору снова разрешено самостоятельно одобрять ТЗ",
+      )
+    end
+
+    it "keeps repeated unlock requests idempotent but rejects outsiders" do
+      unlock_author_approval
+      expect(response.status).to eq(200)
+      expect(author_unlock_posts.count).to eq(0)
+
+      sign_in(Fabricate(:user))
+      unlock_author_approval
+      expect(response.status).to eq(403)
+      expect(author_unlock_posts.count).to eq(0)
+    end
+
+    it "blocks author approval until another approver unlocks the topic" do
+      SiteSetting.tz_author_approval_delay = 0
+      sign_in(user)
+      lock_author_approval
+      expect(response.status).to eq(200)
+
+      GroupUser.create!(group: tz_group, user: topic_author)
+      sign_in(topic_author)
+      approve_topic
+      expect(response.status).to eq(403)
+
+      sign_in(user)
+      unlock_author_approval
+      expect(response.status).to eq(200)
+
+      sign_in(topic_author)
+      approve_topic
+      expect(response.status).to eq(200)
+    end
+
+    it "blocks a staff author from approving while the lock is active" do
+      admin_topic = Fabricate(:topic, category: category, user: admin)
+      sign_in(other_admin)
+      lock_author_approval(admin_topic)
+      expect(response.status).to eq(200)
+
+      sign_in(admin)
+      approve_topic(admin_topic)
+      expect(response.status).to eq(403)
+    end
+
+    it "lets an approver approve and unapprove while preserving the lock" do
+      sign_in(user)
+      lock_author_approval
+      expect(response.status).to eq(200)
+
+      approve_topic
+      expect(response.status).to eq(200)
+      topic.reload
+      expect(topic.custom_fields["tz_author_approval_locked"]).to eq(true)
+
+      unapprove_topic
+      expect(response.status).to eq(200)
+      topic.reload
+      expect(topic.custom_fields["tz_author_approval_locked"]).to eq(true)
+    end
+
+    it "allows locking an already approved topic" do
+      approve_topic
+      expect(response.status).to eq(200)
+
+      sign_in(user)
+      lock_author_approval
+
+      expect(response.status).to eq(200)
+      topic.reload
+      expect(topic.custom_fields["tz_approved"]).to eq(true)
+      expect(topic.custom_fields["tz_author_approval_locked"]).to eq(true)
+    end
   end
 end

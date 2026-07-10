@@ -82,6 +82,8 @@ module TzApproval
             :approved_by_author_text,
             :approved_action_text,
             :unapproved_action_text,
+            :author_locked_action_text,
+            :author_unlocked_action_text,
             :approved_description,
             :unapproved_description,
             category_ids: [],

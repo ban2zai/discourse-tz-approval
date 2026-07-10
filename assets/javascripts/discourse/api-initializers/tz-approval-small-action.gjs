@@ -45,12 +45,25 @@ function approvalProfiles() {
 
 function profileForActionCode(code) {
   return approvalProfiles().find((profile) => {
-    return code === `${profile.prefix}_approved` || code === `${profile.prefix}_unapproved`;
+    return (
+      code === `${profile.prefix}_approved` ||
+      code === `${profile.prefix}_unapproved` ||
+      code === `${profile.prefix}_author_locked` ||
+      code === `${profile.prefix}_author_unlocked`
+    );
   });
 }
 
 function isApprovedAction(code) {
   return code?.endsWith("_approved");
+}
+
+function isAuthorLockAction(code) {
+  return code?.endsWith("_author_locked");
+}
+
+function isAuthorUnlockAction(code) {
+  return code?.endsWith("_author_unlocked");
 }
 
 function isTzApprovalAction(code) {
@@ -72,6 +85,14 @@ export default apiInitializer((api) => {
         }
 
         get icon() {
+          if (this.notification.data.action === "author_locked") {
+            return "user-lock";
+          }
+
+          if (this.notification.data.action === "author_unlocked") {
+            return "lock-open";
+          }
+
           const prefix = this.notification.data.profile_prefix;
           return approvalIcon(prefix);
         }
@@ -107,6 +128,14 @@ export default apiInitializer((api) => {
 
     return class TzApprovalSmallAction extends Component {
       get title() {
+        if (isAuthorLockAction(this.args.code)) {
+          return i18n("tz_approval.small_action.author_locked");
+        }
+
+        if (isAuthorUnlockAction(this.args.code)) {
+          return i18n("tz_approval.small_action.author_unlocked");
+        }
+
         const profile = profileForActionCode(this.args.code);
 
         if (!profile) {
@@ -161,6 +190,14 @@ export default apiInitializer((api) => {
       });
 
       get approvalIcon() {
+        if (isAuthorLockAction(this.args.code)) {
+          return "user-lock";
+        }
+
+        if (isAuthorUnlockAction(this.args.code)) {
+          return "lock-open";
+        }
+
         return profileForActionCode(this.args.code)?.icon || safeIcon(DEFAULT_ICON);
       }
 
@@ -212,6 +249,14 @@ export default apiInitializer((api) => {
   api.registerValueTransformer("post-small-action-icon", ({ value, context }) => {
     if (!isTzApprovalAction(context.code)) {
       return value;
+    }
+
+    if (isAuthorLockAction(context.code)) {
+      return "user-lock";
+    }
+
+    if (isAuthorUnlockAction(context.code)) {
+      return "lock-open";
     }
 
     return profileForActionCode(context.code)?.icon || safeIcon(DEFAULT_ICON);
