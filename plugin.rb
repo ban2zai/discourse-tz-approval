@@ -29,6 +29,7 @@ module ::TzApproval
   TAG_BINDING_MODE = "tag"
   DEFAULT_PROFILE_KEY = "tz"
   DEFAULT_PROFILE_PREFIX = "tz"
+  SS_PROFILE_PREFIX = "ss"
   SECOND_LINE_PROFILE_PREFIX = "second_line"
   SOLVED_TABLE_NAME = "discourse_solved_solved_topics"
   PROFILE_CACHE_KEY = "profiles"
@@ -372,11 +373,13 @@ module ::TzApproval
   def self.topic_status_payload(topic)
     approvals = approval_profiles_status(topic)
     tz_approval = approvals.find { |approval| approval[:profile_prefix] == DEFAULT_PROFILE_PREFIX }
-    second_line_approval =
-      approvals.find do |approval|
-        approval[:profile_prefix] == SECOND_LINE_PROFILE_PREFIX ||
-          approval[:profile_key] == SECOND_LINE_PROFILE_PREFIX
-      end
+    ss_approval = approvals.find do |approval|
+      approval[:profile_prefix] == SS_PROFILE_PREFIX || approval[:profile_key] == SS_PROFILE_PREFIX
+    end
+    ss_approval ||= approvals.find do |approval|
+      approval[:profile_prefix] == SECOND_LINE_PROFILE_PREFIX ||
+        approval[:profile_key] == SECOND_LINE_PROFILE_PREFIX
+    end
     solution = solution_status(topic)
 
     {
@@ -386,8 +389,8 @@ module ::TzApproval
       is_tz: tz_approval&.dig(:is_applicable) || false,
       tz_approved: tz_approval&.dig(:approved) || false,
       tz_approved_by: approved_by_payload(tz_approval),
-      ss_approved: second_line_approval&.dig(:approved) || false,
-      ss_approved_by: approved_by_payload(second_line_approval),
+      ss_approved: ss_approval&.dig(:approved) || false,
+      ss_approved_by: approved_by_payload(ss_approval),
       approvals: approvals,
       can_set_solution: solution[:can_set_solution],
       has_solution: solution[:has_solution],

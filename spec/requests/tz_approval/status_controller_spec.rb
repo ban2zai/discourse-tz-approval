@@ -115,6 +115,79 @@ RSpec.describe TzApproval::StatusController do
     )
   end
 
+  it "keeps ss legacy fields in sync after moving a topic into an ss profile category" do
+    source_category = Fabricate(:category)
+    ss_category = Fabricate(:category)
+    moved_topic = Fabricate(:topic, category: source_category, user: topic_author)
+
+    TzApproval::ProfileRecord.create!(
+      key: "ss",
+      prefix: "ss",
+      label: "СС",
+      enabled: true,
+      priority: 100,
+      binding_mode: "category",
+      icon: "file-signature",
+      category_ids: [ss_category.id],
+    )
+
+    expect(TzApproval.topic_applicable_profile(moved_topic)).to be_nil
+
+    moved_topic.update!(category: ss_category)
+    sign_in(admin)
+
+    post "/tz-approval/approve.json", params: { topic_id: moved_topic.id }
+
+    expect(response.status).to eq(200)
+    expect(response.parsed_body).to include(
+      "approval_profile_key" => "ss",
+      "approval_profile_prefix" => "ss",
+      "approved" => true,
+    )
+
+    get "/approvals/topic-id/#{moved_topic.id}/#{token}.json"
+
+    expect(response.status).to eq(200)
+
+    body = response.parsed_body
+    ss_approval = body["approvals"].find { |approval| approval["profile_prefix"] == "ss" }
+
+    expect(ss_approval).to include(
+      "profile_key" => "ss",
+      "is_applicable" => true,
+      "approved" => true,
+    )
+    expect(ss_approval["approved_by"]).to include(
+      "id" => admin.id,
+      "username" => admin.username,
+      "at" => be_present,
+    )
+    expect(body["ss_approved"]).to eq(ss_approval["approved"])
+    expect(body["ss_approved_by"]).to eq(ss_approval["approved_by"])
+    expect(body["tz_approved"]).to eq(false)
+  end
+
+  it "falls back to second_line for ss legacy fields" do
+    second_line_topic = Fabricate(:topic, category: second_line_category, user: topic_author)
+    approve_profile(second_line_topic, "second_line")
+
+    get "/approvals/topic-id/#{second_line_topic.id}/#{token}.json"
+
+    expect(response.status).to eq(200)
+
+    body = response.parsed_body
+    second_line_approval =
+      body["approvals"].find { |approval| approval["profile_prefix"] == "second_line" }
+
+    expect(second_line_approval).to include(
+      "profile_key" => "second_line",
+      "is_applicable" => true,
+      "approved" => true,
+    )
+    expect(body["ss_approved"]).to eq(second_line_approval["approved"])
+    expect(body["ss_approved_by"]).to eq(second_line_approval["approved_by"])
+  end
+
   it "accepts the status token from a request header" do
     approve_profile(topic, "tz")
 
