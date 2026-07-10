@@ -1,5 +1,37 @@
+@use "lib/viewport";
+
 :root {
   --tz-approval-color: light-dark(#d9a441, #d9a441);
+}
+
+#topic-footer-buttons {
+  .topic-footer-main-buttons__actions:has(> .tz-approval-footer-action) {
+    &::after {
+      content: "";
+      flex: 0 0 100%;
+      height: 0;
+      order: 1;
+    }
+
+    > .tz-approval-footer-action {
+      flex: 0 0 auto;
+      order: 2;
+    }
+  }
+}
+
+@include viewport.until(sm) {
+  html:not(.anon) #topic-footer-buttons {
+    .topic-footer-main-buttons .tz-approval-footer-action {
+      .d-button-label {
+        display: inline;
+      }
+
+      .d-icon {
+        margin-right: 0.45em;
+      }
+    }
+  }
 }
 
 .tz-approval-topic-status {

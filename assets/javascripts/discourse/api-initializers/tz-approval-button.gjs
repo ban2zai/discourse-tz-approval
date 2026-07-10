@@ -117,8 +117,12 @@ export default apiInitializer((api) => {
 
     classNames() {
       return isApproved(this.topic)
-        ? ["tz-approval-footer-button", "btn-success"]
-        : ["tz-approval-footer-button"];
+        ? [
+            "tz-approval-footer-action",
+            "tz-approval-footer-button",
+            "btn-success",
+          ]
+        : ["tz-approval-footer-action", "tz-approval-footer-button"];
     },
 
     async action() {
@@ -174,7 +178,7 @@ export default apiInitializer((api) => {
   api.registerTopicFooterButton({
     id: "tz-approval-author-lock",
     icon() {
-      return this.topic.author_approval_locked ? "lock-open" : "user-lock";
+      return this.topic.author_approval_locked ? "lock-open" : "lock";
     },
     priority: 240,
     dependentKeys: [
@@ -198,8 +202,12 @@ export default apiInitializer((api) => {
 
     classNames() {
       return this.topic.author_approval_locked
-        ? ["tz-approval-author-lock-button", "btn-danger"]
-        : ["tz-approval-author-lock-button"];
+        ? [
+            "tz-approval-footer-action",
+            "tz-approval-author-lock-button",
+            "btn-danger",
+          ]
+        : ["tz-approval-footer-action", "tz-approval-author-lock-button"];
     },
 
     async action() {

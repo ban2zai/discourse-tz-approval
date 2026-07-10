@@ -86,7 +86,7 @@ export default apiInitializer((api) => {
 
         get icon() {
           if (this.notification.data.action === "author_locked") {
-            return "user-lock";
+            return "lock";
           }
 
           if (this.notification.data.action === "author_unlocked") {
@@ -191,7 +191,7 @@ export default apiInitializer((api) => {
 
       get approvalIcon() {
         if (isAuthorLockAction(this.args.code)) {
-          return "user-lock";
+          return "lock";
         }
 
         if (isAuthorUnlockAction(this.args.code)) {
@@ -252,7 +252,7 @@ export default apiInitializer((api) => {
     }
 
     if (isAuthorLockAction(context.code)) {
-      return "user-lock";
+      return "lock";
     }
 
     if (isAuthorUnlockAction(context.code)) {

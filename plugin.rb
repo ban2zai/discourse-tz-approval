@@ -16,8 +16,8 @@ require "digest"
   file-signature
   stamp
   square-check
+  lock
   lock-open
-  user-lock
   user-plus
 ].each { |icon| register_svg_icon icon }
 
@@ -758,6 +758,9 @@ after_initialize do
       profile = TzApproval.topic_applicable_profile(topic)
       return false unless profile
       return false unless TzApproval.topic_approved_for_profile?(topic, profile)
+      if @user&.id == topic.user_id && TzApproval.topic_author_locked_for_profile?(topic, profile)
+        return false
+      end
 
       allowed = profile.allowed_groups.map(&:to_i)
       approved_by_id = TzApproval.topic_approved_by_id_for_profile(topic, profile)

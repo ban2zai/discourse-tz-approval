@@ -406,7 +406,7 @@ RSpec.describe TzApproval::ApprovalsController do
       expect(author_unlock_posts.count).to eq(0)
     end
 
-    it "blocks author approval until another approver unlocks the topic" do
+    it "blocks all author approval interactions until another approver unlocks the topic" do
       SiteSetting.tz_author_approval_delay = 0
       sign_in(user)
       lock_author_approval
@@ -424,6 +424,24 @@ RSpec.describe TzApproval::ApprovalsController do
       sign_in(topic_author)
       approve_topic
       expect(response.status).to eq(200)
+
+      sign_in(user)
+      lock_author_approval
+      expect(response.status).to eq(200)
+
+      sign_in(topic_author)
+      unapprove_topic
+      expect(response.status).to eq(403)
+      topic.reload
+      expect(topic.custom_fields["tz_approved"]).to eq(true)
+
+      sign_in(user)
+      unlock_author_approval
+      expect(response.status).to eq(200)
+
+      sign_in(topic_author)
+      unapprove_topic
+      expect(response.status).to eq(200)
     end
 
     it "blocks a staff author from approving while the lock is active" do
@@ -435,6 +453,23 @@ RSpec.describe TzApproval::ApprovalsController do
       sign_in(admin)
       approve_topic(admin_topic)
       expect(response.status).to eq(403)
+    end
+
+    it "blocks a staff author from removing their own approval while the lock is active" do
+      admin_topic = Fabricate(:topic, category: category, user: admin)
+      sign_in(admin)
+      approve_topic(admin_topic)
+      expect(response.status).to eq(200)
+
+      sign_in(other_admin)
+      lock_author_approval(admin_topic)
+      expect(response.status).to eq(200)
+
+      sign_in(admin)
+      unapprove_topic(admin_topic)
+      expect(response.status).to eq(403)
+      admin_topic.reload
+      expect(admin_topic.custom_fields["tz_approved"]).to eq(true)
     end
 
     it "lets an approver approve and unapprove while preserving the lock" do
