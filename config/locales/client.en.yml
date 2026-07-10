@@ -8,7 +8,6 @@ en:
       unapprove: "Unapprove TZ"
       lock_author_approval: "Disable author self-approval"
       unlock_author_approval: "Allow author self-approval"
-      footer_actions: "Approval actions"
       approved: "TZ approved"
       approved_by: "TZ approved — %{username}"
       approved_by_author: "TZ approved — Topic author"
