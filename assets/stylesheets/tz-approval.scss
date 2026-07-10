@@ -5,31 +5,42 @@
 }
 
 #topic-footer-buttons {
-  .topic-footer-main-buttons__actions:has(> .tz-approval-footer-action) {
-    &::after {
-      content: "";
-      flex: 0 0 100%;
-      height: 0;
-      order: 1;
-    }
+  &:has(> .tz-approval-footer-actions),
+  &:has(> span > .tz-approval-footer-actions) {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+  }
 
-    > .tz-approval-footer-action {
-      flex: 0 0 auto;
-      order: 2;
-    }
+  > .topic-footer-main-buttons {
+    order: 0;
+  }
+
+  > :is(.tz-approval-footer-actions, span:has(> .tz-approval-footer-actions)) {
+    flex: 0 0 auto;
+    order: 1;
+  }
+
+  > .tz-approval-footer-actions,
+  > span > .tz-approval-footer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  > .topic-notifications-button,
+  > .topic-notifications-button > .reason {
+    order: 2;
   }
 }
 
 @include viewport.until(sm) {
-  html:not(.anon) #topic-footer-buttons {
-    .topic-footer-main-buttons .tz-approval-footer-action {
-      .d-button-label {
-        display: inline;
-      }
+  #topic-footer-buttons > .tz-approval-footer-actions,
+  #topic-footer-buttons > span > .tz-approval-footer-actions {
+    width: 100%;
 
-      .d-icon {
-        margin-right: 0.45em;
-      }
+    > .topic-footer-button {
+      flex: 1 1 16rem;
+      justify-content: flex-start;
     }
   }
 }
