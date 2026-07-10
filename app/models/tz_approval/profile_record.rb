@@ -60,8 +60,8 @@ module TzApproval
         approved_by_author_text: approved_by_author_text,
         approved_action_text: approved_action_text,
         unapproved_action_text: unapproved_action_text,
-        author_locked_action_text: author_locked_action_text,
-        author_unlocked_action_text: author_unlocked_action_text,
+        author_locked_action_text: optional_attribute(:author_locked_action_text),
+        author_unlocked_action_text: optional_attribute(:author_unlocked_action_text),
         approved_description: approved_description,
         unapproved_description: unapproved_description,
       )
@@ -87,8 +87,8 @@ module TzApproval
         approved_by_author_text: approved_by_author_text,
         approved_action_text: approved_action_text,
         unapproved_action_text: unapproved_action_text,
-        author_locked_action_text: author_locked_action_text,
-        author_unlocked_action_text: author_unlocked_action_text,
+        author_locked_action_text: optional_attribute(:author_locked_action_text),
+        author_unlocked_action_text: optional_attribute(:author_unlocked_action_text),
         approved_description: approved_description,
         unapproved_description: unapproved_description,
         system: system?,
@@ -117,10 +117,16 @@ module TzApproval
       self.approved_by_author_text = approved_by_author_text.presence || "#{label} одобрено — Автор темы"
       self.approved_action_text = approved_action_text.presence || "%{username} одобрил #{label}"
       self.unapproved_action_text = unapproved_action_text.presence || "%{username} снял одобрение #{label}"
-      self.author_locked_action_text =
-        author_locked_action_text.presence || "%{username} запретил автору самостоятельно одобрять #{label}"
-      self.author_unlocked_action_text =
-        author_unlocked_action_text.presence || "%{username} разрешил автору самостоятельно одобрять #{label}"
+      if has_attribute?(:author_locked_action_text)
+        self[:author_locked_action_text] =
+          self[:author_locked_action_text].presence ||
+            "%{username} запретил автору самостоятельно одобрять #{label}"
+      end
+      if has_attribute?(:author_unlocked_action_text)
+        self[:author_unlocked_action_text] =
+          self[:author_unlocked_action_text].presence ||
+            "%{username} разрешил автору самостоятельно одобрять #{label}"
+      end
       self.approved_description = approved_description.presence || "#{label} подтверждено"
       self.unapproved_description = unapproved_description.presence || "Одобрение #{label} снято"
     end
@@ -160,6 +166,10 @@ module TzApproval
       else
         item
       end
+    end
+
+    def optional_attribute(name)
+      self[name] if has_attribute?(name)
     end
 
     def clear_profiles_cache

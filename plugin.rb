@@ -37,6 +37,10 @@ module ::TzApproval
   PROFILE_CACHE_KEY = "profiles_v2"
   NOTIFICATION_TYPE_ID = 167
   PROFILE_PREFIX_REGEXP = /\A[a-z0-9_]+\z/
+  AUTHOR_LOCK_PROFILE_TEXT_FIELDS = %i[
+    author_locked_action_text
+    author_unlocked_action_text
+  ].freeze
   DEFAULT_PROFILE_TEXT_FIELDS = %i[
     label
     approve_text
@@ -139,6 +143,11 @@ module ::TzApproval
     record.as_json.except(:system)
   end
 
+  def self.profile_text_schema_current?
+    available_columns = ProfileRecord.column_names
+    AUTHOR_LOCK_PROFILE_TEXT_FIELDS.all? { |field| available_columns.include?(field.to_s) }
+  end
+
   def self.profile_from_cache_attributes(attrs)
     attrs = attrs.with_indifferent_access
 
@@ -222,7 +231,8 @@ module ::TzApproval
     if profile
       backfill_default_profile_texts!(profile)
     else
-      ProfileRecord.create!(default_profile_attributes)
+      available_fields = ProfileRecord.column_names.map(&:to_sym)
+      ProfileRecord.create!(default_profile_attributes.slice(*available_fields))
     end
   rescue ActiveRecord::RecordNotUnique
     ProfileRecord.find_by(key: DEFAULT_PROFILE_KEY)
@@ -237,6 +247,8 @@ module ::TzApproval
   def self.backfill_default_profile_texts!(profile)
     updates =
       DEFAULT_PROFILE_TEXT_FIELDS.each_with_object({}) do |field, attrs|
+        next unless profile.has_attribute?(field)
+
         value = profile.public_send(field)
         next unless value.blank? || value == LEGACY_ENGLISH_DEFAULT_PROFILE_TEXTS[field]
 
@@ -254,6 +266,10 @@ module ::TzApproval
 
   def self.all_profile_attributes
     return [] unless profiles_table_exists?
+
+    unless profile_text_schema_current?
+      return ProfileRecord.ordered.map { |record| profile_record_cache_attributes(record) }
+    end
 
     cached = profile_cache[PROFILE_CACHE_KEY]
     return cached if cached

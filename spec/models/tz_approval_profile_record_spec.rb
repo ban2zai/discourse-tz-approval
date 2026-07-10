@@ -34,6 +34,42 @@ RSpec.describe TzApproval::ProfileRecord do
     )
   end
 
+  it "tolerates missing author lock columns while migrations are booting" do
+    profile = described_class.create!(key: "line", prefix: "line", label: "Линия")
+    profile.stubs(:has_attribute?).returns(true)
+    profile.stubs(:has_attribute?).with(:author_locked_action_text).returns(false)
+    profile.stubs(:has_attribute?).with(:author_unlocked_action_text).returns(false)
+
+    expect(profile.as_json).to include(
+      author_locked_action_text: nil,
+      author_unlocked_action_text: nil,
+    )
+    expect(profile.to_profile.author_locked_action_text).to be_nil
+    expect { profile.send(:set_default_texts) }.not_to raise_error
+    expect { TzApproval.backfill_default_profile_texts!(profile) }.not_to raise_error
+  end
+
+  it "does not use the profile cache before author lock columns exist" do
+    described_class.create!(key: "line", prefix: "line", label: "Линия")
+    TzApproval.stubs(:profile_text_schema_current?).returns(false)
+    TzApproval.expects(:profile_cache).never
+
+    expect(TzApproval.all_profile_attributes.first[:key]).to eq("line")
+  end
+
+  it "filters unavailable columns when seeding the default profile" do
+    available_columns =
+      described_class.column_names - %w[author_locked_action_text author_unlocked_action_text]
+    described_class.stubs(:column_names).returns(available_columns)
+    described_class
+      .expects(:create!)
+      .with do |attrs|
+        !attrs.key?(:author_locked_action_text) && !attrs.key?(:author_unlocked_action_text)
+      end
+
+    TzApproval.ensure_default_profile!
+  end
+
   it "backfills legacy English texts on the default TZ profile" do
     described_class.create!(
       key: "tz",
