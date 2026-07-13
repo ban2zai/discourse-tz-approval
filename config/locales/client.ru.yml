@@ -8,6 +8,7 @@ ru:
       unapprove: "Снять одобрение"
       lock_author_approval: "Запретить самоодобрение"
       unlock_author_approval: "Разрешить самоодобрение"
+      footer_actions: "Действия одобрения"
       approved: "ТЗ одобрено"
       approved_by: "ТЗ одобрено — %{username}"
       approved_by_author: "ТЗ одобрено — Автор темы"
