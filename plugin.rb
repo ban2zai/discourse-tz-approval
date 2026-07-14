@@ -568,7 +568,13 @@ module ::TzApproval
     Post.where(topic_id: topic.id, deleted_at: nil).where("post_number > 1").exists?
   end
 
-  def self.profile_payload(topic, guardian = nil, include_username: true, include_lock: false)
+  def self.profile_payload(
+    topic,
+    guardian = nil,
+    include_username: true,
+    include_lock: false,
+    redact_author_identity: false
+  )
     profile = topic_applicable_profile(topic)
     payload = {
       approval_profile_key: nil,
@@ -580,7 +586,9 @@ module ::TzApproval
       approval_approved_text: nil,
       approval_approved_by_author_text: nil,
       approved: false,
+      approved_by_author: false,
       approved_by_id: nil,
+      approved_by_username: nil,
       approved_at: nil,
     }
 
@@ -593,7 +601,13 @@ module ::TzApproval
     end
 
     if profile
+      approved = topic_approved_for_profile?(topic, profile)
       approved_by_id = topic_approved_by_id_for_profile(topic, profile)
+      approved_by_topic_author =
+        approved_by_id.present? && approved_by_id.to_i == topic.user_id
+      approved_by_author = approved && approved_by_topic_author
+      visible_approved_by_id =
+        redact_author_identity && approved_by_topic_author ? nil : approved_by_id
       locked_by_id = topic_author_locked_by_id_for_profile(topic, profile) if include_lock
       payload.merge!(
         approval_profile_key: profile.key,
@@ -604,8 +618,9 @@ module ::TzApproval
         approval_unapprove_text: profile.unapprove_text,
         approval_approved_text: profile.approved_text,
         approval_approved_by_author_text: profile.approved_by_author_text,
-        approved: topic_approved_for_profile?(topic, profile),
-        approved_by_id: approved_by_id,
+        approved: approved,
+        approved_by_author: approved_by_author,
+        approved_by_id: visible_approved_by_id,
         approved_at: topic_approved_at_for_profile(topic, profile),
       )
 
@@ -617,8 +632,8 @@ module ::TzApproval
         )
       end
 
-      if include_username && approved_by_id.present?
-        payload[:approved_by_username] = User.find_by(id: approved_by_id)&.username
+      if include_username && visible_approved_by_id.present?
+        payload[:approved_by_username] = User.find_by(id: visible_approved_by_id)&.username
       end
 
       if include_lock && include_username && locked_by_id.present?
@@ -638,17 +653,40 @@ module ::TzApproval
     payload
   end
 
-  def self.tz_payload(topic)
+  def self.tz_payload(topic, redact_author_identity: false)
     profile = all_profile_for_key(DEFAULT_PROFILE_KEY) || legacy_default_profile
+    approved = topic_approved_for_profile?(topic, profile)
     approved_by_id = topic_approved_by_id_for_profile(topic, profile)
+    approved_by_topic_author =
+      approved_by_id.present? && approved_by_id.to_i == topic.user_id
+    visible_approved_by_id =
+      redact_author_identity && approved_by_topic_author ? nil : approved_by_id
 
     {
-      tz_approved: topic_approved_for_profile?(topic, profile),
-      tz_approved_by_id: approved_by_id,
+      tz_approved: approved,
+      tz_approved_by_id: visible_approved_by_id,
       tz_approved_at: topic_approved_at_for_profile(topic, profile),
       tz_approved_by_username:
-        approved_by_id.present? ? User.find_by(id: approved_by_id)&.username : nil,
+        visible_approved_by_id.present? ? User.find_by(id: visible_approved_by_id)&.username : nil,
     }
+  end
+
+  def self.topic_view_profile_payload(topic, guardian)
+    profile_payload(
+      topic,
+      guardian,
+      include_username: true,
+      include_lock: true,
+      redact_author_identity: true,
+    )
+  end
+
+  def self.topic_list_profile_payload(topic)
+    profile_payload(topic, nil, include_username: false, redact_author_identity: true)
+  end
+
+  def self.topic_view_tz_payload(topic)
+    tz_payload(topic, redact_author_identity: true)
   end
 end
 
@@ -843,32 +881,33 @@ after_initialize do
     approved_at
   ].each do |field|
     add_to_serializer(:topic_view, field) do
-      @tz_approval_payload ||=
-        TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
+      @tz_approval_payload ||= TzApproval.topic_view_profile_payload(object.topic, scope)
       @tz_approval_payload[field]
     end
 
     add_to_serializer(:topic_list_item, field) do
-      @tz_approval_payload ||= TzApproval.profile_payload(object, nil, include_username: false)
+      @tz_approval_payload ||= TzApproval.topic_list_profile_payload(object)
       @tz_approval_payload[field]
     end
   end
 
+  add_to_serializer(:topic_view, :approved_by_author) do
+    @tz_approval_payload ||= TzApproval.topic_view_profile_payload(object.topic, scope)
+    @tz_approval_payload[:approved_by_author]
+  end
+
   add_to_serializer(:topic_view, :approved_by_username) do
-    @tz_approval_payload ||=
-      TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
+    @tz_approval_payload ||= TzApproval.topic_view_profile_payload(object.topic, scope)
     @tz_approval_payload[:approved_by_username]
   end
 
   add_to_serializer(:topic_view, :can_approve) do
-    @tz_approval_payload ||=
-      TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
+    @tz_approval_payload ||= TzApproval.topic_view_profile_payload(object.topic, scope)
     @tz_approval_payload[:can_approve]
   end
 
   add_to_serializer(:topic_view, :can_unapprove) do
-    @tz_approval_payload ||=
-      TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
+    @tz_approval_payload ||= TzApproval.topic_view_profile_payload(object.topic, scope)
     @tz_approval_payload[:can_unapprove]
   end
 
@@ -881,41 +920,38 @@ after_initialize do
     can_unlock_author_approval
   ].each do |field|
     add_to_serializer(:topic_view, field) do
-      @tz_approval_payload ||=
-        TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
+      @tz_approval_payload ||= TzApproval.topic_view_profile_payload(object.topic, scope)
       @tz_approval_payload[field]
     end
   end
 
   add_to_serializer(:topic_view, :tz_approved) do
-    @tz_approval_legacy_payload ||= TzApproval.tz_payload(object.topic)
+    @tz_approval_legacy_payload ||= TzApproval.topic_view_tz_payload(object.topic)
     @tz_approval_legacy_payload[:tz_approved]
   end
 
   add_to_serializer(:topic_view, :tz_approved_by_id) do
-    @tz_approval_legacy_payload ||= TzApproval.tz_payload(object.topic)
+    @tz_approval_legacy_payload ||= TzApproval.topic_view_tz_payload(object.topic)
     @tz_approval_legacy_payload[:tz_approved_by_id]
   end
 
   add_to_serializer(:topic_view, :tz_approved_at) do
-    @tz_approval_legacy_payload ||= TzApproval.tz_payload(object.topic)
+    @tz_approval_legacy_payload ||= TzApproval.topic_view_tz_payload(object.topic)
     @tz_approval_legacy_payload[:tz_approved_at]
   end
 
   add_to_serializer(:topic_view, :tz_approved_by_username) do
-    @tz_approval_legacy_payload ||= TzApproval.tz_payload(object.topic)
+    @tz_approval_legacy_payload ||= TzApproval.topic_view_tz_payload(object.topic)
     @tz_approval_legacy_payload[:tz_approved_by_username]
   end
 
   add_to_serializer(:topic_view, :can_approve_tz) do
-    @tz_approval_payload ||=
-      TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
+    @tz_approval_payload ||= TzApproval.topic_view_profile_payload(object.topic, scope)
     @tz_approval_payload[:can_approve]
   end
 
   add_to_serializer(:topic_view, :can_unapprove_tz) do
-    @tz_approval_payload ||=
-      TzApproval.profile_payload(object.topic, scope, include_username: true, include_lock: true)
+    @tz_approval_payload ||= TzApproval.topic_view_profile_payload(object.topic, scope)
     @tz_approval_payload[:can_unapprove]
   end
 

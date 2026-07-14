@@ -110,6 +110,11 @@ RSpec.describe TzApproval::ApprovalsController do
     expect(response.parsed_body["approval_profile_key"]).to eq("tz")
     expect(response.parsed_body["approval_profile_prefix"]).to eq("tz")
     expect(response.parsed_body["approved"]).to eq(true)
+    expect(response.parsed_body).to include(
+      "approved_by_author" => false,
+      "approved_by_id" => admin.id,
+      "approved_by_username" => admin.username,
+    )
     expect(response.parsed_body["tz_approved"]).to eq(true)
 
     approval_post = approval_posts.first
@@ -165,6 +170,82 @@ RSpec.describe TzApproval::ApprovalsController do
 
     approve_topic
     expect(response.status).to eq(200)
+    expect(response.parsed_body).to include(
+      "approved_by_author" => true,
+      "approved_by_id" => topic_author.id,
+      "approved_by_username" => topic_author.username,
+      "tz_approved_by_id" => topic_author.id,
+      "tz_approved_by_username" => topic_author.username,
+    )
+  end
+
+  describe "topic view approval identity" do
+    it "redacts the topic author identity from modern and legacy browser payloads" do
+      SiteSetting.tz_author_approval_delay = 0
+      sign_in(topic_author)
+      approve_topic
+
+      expect(response.status).to eq(200)
+      topic.reload
+
+      [admin, Fabricate(:user)].each do |viewer|
+        serializer =
+          TopicViewSerializer.new(
+            OpenStruct.new(topic: topic),
+            scope: guardian(viewer),
+            root: false,
+          )
+
+        expect(serializer.approved_by_author).to eq(true)
+        expect(serializer.approved_by_id).to be_nil
+        expect(serializer.approved_by_username).to be_nil
+        expect(serializer.tz_approved_by_id).to be_nil
+        expect(serializer.tz_approved_by_username).to be_nil
+      end
+
+      topic_list_serializer =
+        TopicListItemSerializer.new(topic, scope: guardian(Fabricate(:user)), root: false)
+      expect(topic_list_serializer.approved_by_id).to be_nil
+    end
+
+    it "does not expose a stale author id when the approved flag is absent" do
+      topic.custom_fields["tz_approved_by_id"] = topic_author.id
+      topic.save_custom_fields(true)
+
+      serializer =
+        TopicViewSerializer.new(
+          OpenStruct.new(topic: topic),
+          scope: guardian(Fabricate(:user)),
+          root: false,
+        )
+
+      expect(serializer.approved).to eq(false)
+      expect(serializer.approved_by_author).to eq(false)
+      expect(serializer.approved_by_id).to be_nil
+      expect(serializer.approved_by_username).to be_nil
+      expect(serializer.tz_approved_by_id).to be_nil
+      expect(serializer.tz_approved_by_username).to be_nil
+    end
+
+    it "keeps another approver visible in the browser payload" do
+      approve_topic
+
+      expect(response.status).to eq(200)
+      topic.reload
+
+      serializer =
+        TopicViewSerializer.new(
+          OpenStruct.new(topic: topic),
+          scope: guardian(Fabricate(:user)),
+          root: false,
+        )
+
+      expect(serializer.approved_by_author).to eq(false)
+      expect(serializer.approved_by_id).to eq(admin.id)
+      expect(serializer.approved_by_username).to eq(admin.username)
+      expect(serializer.tz_approved_by_id).to eq(admin.id)
+      expect(serializer.tz_approved_by_username).to eq(admin.username)
+    end
   end
 
   it "uses priority when profile categories overlap" do

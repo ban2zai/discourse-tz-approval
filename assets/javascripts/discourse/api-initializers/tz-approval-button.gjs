@@ -1,4 +1,5 @@
 import Component from "@glimmer/component";
+import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
 import { apiInitializer } from "discourse/lib/api";
@@ -21,6 +22,7 @@ const APPROVAL_FIELDS = [
   "approval_approved_text",
   "approval_approved_by_author_text",
   "approved",
+  "approved_by_author",
   "approved_by_id",
   "approved_by_username",
   "approved_at",
@@ -54,6 +56,12 @@ function topicApprovalIcon(topic) {
 
 function isApproved(topic) {
   return topic.approved ?? topic.tz_approved;
+}
+
+function approvalStateSnapshot(topic) {
+  return Object.fromEntries(
+    APPROVAL_FIELDS.map((field) => [field, topic?.[field]])
+  );
 }
 
 function setModelApprovalState(model, state) {
@@ -90,9 +98,48 @@ function syncApprovalState(topic, state) {
 
 class TzApprovalFooterActions extends Component {
   @service currentUser;
+  @tracked pendingApprovalState = null;
 
   get topic() {
     return this.args.outletArgs.topic;
+  }
+
+  get approvalState() {
+    return this.pendingApprovalState?.topicId === this.topic?.id
+      ? this.pendingApprovalState.values
+      : this.topic;
+  }
+
+  get actionPending() {
+    return this.pendingApprovalState?.topicId === this.topic?.id;
+  }
+
+  setPendingApprovalState(topic, state) {
+    const requestId = Symbol();
+
+    this.pendingApprovalState = {
+      topicId: topic.id,
+      requestId,
+      values: {
+        ...approvalStateSnapshot(this.approvalState),
+        ...state,
+      },
+    };
+    syncApprovalState(topic, state);
+
+    return requestId;
+  }
+
+  settleApprovalState(topic, state, requestId) {
+    syncApprovalState(topic, state);
+
+    if (this.topic?.id === topic.id && this.topic !== topic) {
+      syncApprovalState(this.topic, state);
+    }
+
+    if (this.pendingApprovalState?.requestId === requestId) {
+      this.pendingApprovalState = null;
+    }
   }
 
   get displayed() {
@@ -104,29 +151,35 @@ class TzApprovalFooterActions extends Component {
   }
 
   get canChangeApproval() {
+    const state = this.approvalState;
+
     return (
-      !!this.topic.can_approve ||
-      !!this.topic.can_unapprove ||
-      !!this.topic.can_approve_tz ||
-      !!this.topic.can_unapprove_tz
+      !!state.can_approve ||
+      !!state.can_unapprove ||
+      !!state.can_approve_tz ||
+      !!state.can_unapprove_tz
     );
   }
 
   get canChangeAuthorLock() {
+    const state = this.approvalState;
+
     return (
-      !!this.topic.can_lock_author_approval ||
-      !!this.topic.can_unlock_author_approval
+      !!state.can_lock_author_approval ||
+      !!state.can_unlock_author_approval
     );
   }
 
   get approvalIcon() {
-    return topicApprovalIcon(this.topic);
+    return topicApprovalIcon(this.approvalState);
   }
 
   get approvalLabel() {
-    return isApproved(this.topic)
-      ? this.topic.approval_unapprove_text || i18n("tz_approval.unapprove")
-      : this.topic.approval_approve_text || i18n("tz_approval.approve");
+    const state = this.approvalState;
+
+    return isApproved(state)
+      ? state.approval_unapprove_text || i18n("tz_approval.unapprove")
+      : state.approval_approve_text || i18n("tz_approval.approve");
   }
 
   get approvalButtonClass() {
@@ -137,7 +190,7 @@ class TzApprovalFooterActions extends Component {
       "tz-approval-footer-button",
     ];
 
-    if (isApproved(this.topic)) {
+    if (isApproved(this.approvalState)) {
       classes.push("btn-success");
     }
 
@@ -145,11 +198,11 @@ class TzApprovalFooterActions extends Component {
   }
 
   get authorLockIcon() {
-    return this.topic.author_approval_locked ? "lock-open" : "lock";
+    return this.approvalState.author_approval_locked ? "lock-open" : "lock";
   }
 
   get authorLockLabel() {
-    return this.topic.author_approval_locked
+    return this.approvalState.author_approval_locked
       ? i18n("tz_approval.unlock_author_approval")
       : i18n("tz_approval.lock_author_approval");
   }
@@ -162,7 +215,7 @@ class TzApprovalFooterActions extends Component {
       "tz-approval-author-lock-button",
     ];
 
-    if (this.topic.author_approval_locked) {
+    if (this.approvalState.author_approval_locked) {
       classes.push("btn-danger");
     }
 
@@ -171,44 +224,52 @@ class TzApprovalFooterActions extends Component {
 
   @action
   async changeApproval() {
+    if (this.actionPending) {
+      return;
+    }
+
     const topic = this.topic;
-    const currentlyApproved = isApproved(topic);
+    const state = this.approvalState;
+    const currentlyApproved = isApproved(state);
     const isTzProfile =
-      topic.approval_profile_key === "tz" || !topic.approval_profile_key;
+      state.approval_profile_key === "tz" || !state.approval_profile_key;
+    const approvedByAuthor =
+      !currentlyApproved && this.currentUser?.id === topic.user_id;
     const endpoint = currentlyApproved
       ? "/tz-approval/unapprove"
       : "/tz-approval/approve";
-    const previousState = Object.fromEntries(
-      APPROVAL_FIELDS.map((field) => [field, topic[field]])
-    );
+    const previousState = approvalStateSnapshot(state);
 
-    syncApprovalState(topic, {
+    const requestId = this.setPendingApprovalState(topic, {
       approved: !currentlyApproved,
+      approved_by_author: approvedByAuthor,
       can_approve: currentlyApproved,
       can_unapprove: !currentlyApproved,
-      approved_by_username: currentlyApproved ? null : this.currentUser?.username,
-      approved_by_id: currentlyApproved ? null : this.currentUser?.id,
+      approved_by_username:
+        currentlyApproved || approvedByAuthor ? null : this.currentUser?.username,
+      approved_by_id:
+        currentlyApproved || approvedByAuthor ? null : this.currentUser?.id,
       approved_at: currentlyApproved ? null : new Date().toISOString(),
-      tz_approved: isTzProfile ? !currentlyApproved : topic.tz_approved,
-      can_approve_tz: isTzProfile ? currentlyApproved : topic.can_approve_tz,
+      tz_approved: isTzProfile ? !currentlyApproved : state.tz_approved,
+      can_approve_tz: isTzProfile ? currentlyApproved : state.can_approve_tz,
       can_unapprove_tz: isTzProfile
         ? !currentlyApproved
-        : topic.can_unapprove_tz,
+        : state.can_unapprove_tz,
       tz_approved_by_username: isTzProfile
-        ? currentlyApproved
+        ? currentlyApproved || approvedByAuthor
           ? null
           : this.currentUser?.username
-        : topic.tz_approved_by_username,
+        : state.tz_approved_by_username,
       tz_approved_by_id: isTzProfile
-        ? currentlyApproved
+        ? currentlyApproved || approvedByAuthor
           ? null
           : this.currentUser?.id
-        : topic.tz_approved_by_id,
+        : state.tz_approved_by_id,
       tz_approved_at: isTzProfile
         ? currentlyApproved
           ? null
           : new Date().toISOString()
-        : topic.tz_approved_at,
+        : state.tz_approved_at,
     });
 
     try {
@@ -216,25 +277,28 @@ class TzApprovalFooterActions extends Component {
         type: "POST",
         data: { topic_id: topic.id },
       });
-      syncApprovalState(topic, result);
+      this.settleApprovalState(topic, result, requestId);
     } catch (error) {
-      syncApprovalState(topic, previousState);
+      this.settleApprovalState(topic, previousState, requestId);
       popupAjaxError(error);
     }
   }
 
   @action
   async changeAuthorLock() {
+    if (this.actionPending) {
+      return;
+    }
+
     const topic = this.topic;
-    const currentlyLocked = !!topic.author_approval_locked;
+    const state = this.approvalState;
+    const currentlyLocked = !!state.author_approval_locked;
     const endpoint = currentlyLocked
       ? "/tz-approval/unlock-author-approval"
       : "/tz-approval/lock-author-approval";
-    const previousState = Object.fromEntries(
-      APPROVAL_FIELDS.map((field) => [field, topic[field]])
-    );
+    const previousState = approvalStateSnapshot(state);
 
-    syncApprovalState(topic, {
+    const requestId = this.setPendingApprovalState(topic, {
       author_approval_locked: !currentlyLocked,
       author_approval_locked_by_id: currentlyLocked ? null : this.currentUser?.id,
       author_approval_locked_by_username: currentlyLocked
@@ -252,9 +316,9 @@ class TzApprovalFooterActions extends Component {
         type: "POST",
         data: { topic_id: topic.id },
       });
-      syncApprovalState(topic, result);
+      this.settleApprovalState(topic, result, requestId);
     } catch (error) {
-      syncApprovalState(topic, previousState);
+      this.settleApprovalState(topic, previousState, requestId);
       popupAjaxError(error);
     }
   }
@@ -272,6 +336,7 @@ class TzApprovalFooterActions extends Component {
             @icon={{this.approvalIcon}}
             @translatedLabel={{this.approvalLabel}}
             @translatedAriaLabel={{this.approvalLabel}}
+            @disabled={{this.actionPending}}
             id="topic-footer-button-tz-approval"
             class={{this.approvalButtonClass}}
           />
@@ -283,6 +348,7 @@ class TzApprovalFooterActions extends Component {
             @icon={{this.authorLockIcon}}
             @translatedLabel={{this.authorLockLabel}}
             @translatedAriaLabel={{this.authorLockLabel}}
+            @disabled={{this.actionPending}}
             id="topic-footer-button-tz-approval-author-lock"
             class={{this.authorLockButtonClass}}
           />

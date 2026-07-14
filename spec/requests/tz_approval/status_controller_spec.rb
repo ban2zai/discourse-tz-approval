@@ -138,6 +138,23 @@ RSpec.describe TzApproval::StatusController do
     )
   end
 
+  it "keeps the approving author identity in the token status API" do
+    approve_profile(topic, "tz", topic_author)
+
+    get "/approvals/topic-id/#{topic.id}/#{token}.json"
+
+    expect(response.status).to eq(200)
+    body = response.parsed_body
+    tz_approval = body["approvals"].find { |approval| approval["profile_prefix"] == "tz" }
+
+    expect(tz_approval["approved_by"]).to include(
+      "id" => topic_author.id,
+      "username" => topic_author.username,
+      "at" => "2026-07-04T10:00:00Z",
+    )
+    expect(body["tz_approved_by"]).to eq(tz_approval["approved_by"])
+  end
+
   it "keeps ss legacy fields in sync after moving a topic into an ss profile category" do
     source_category = Fabricate(:category)
     ss_category = Fabricate(:category)

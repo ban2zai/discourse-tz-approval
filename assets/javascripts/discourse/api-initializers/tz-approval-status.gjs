@@ -3,7 +3,6 @@ import { service } from "@ember/service";
 import { apiInitializer } from "discourse/lib/api";
 import UserLink from "discourse/components/user-link";
 import dIcon from "discourse-common/helpers/d-icon";
-import { eq } from "truth-helpers";
 import { i18n } from "discourse-i18n";
 
 const DEFAULT_ICON = "file-signature";
@@ -47,6 +46,13 @@ export default apiInitializer((api) => {
         return this.topic?.approved_by_username ?? this.topic?.tz_approved_by_username;
       }
 
+      get approvedByAuthor() {
+        return (
+          this.topic?.approved_by_author ??
+          this.approvedById === this.post?.user_id
+        );
+      }
+
       get approvedText() {
         return this.topic?.approval_approved_text || i18n("tz_approval.approved");
       }
@@ -66,7 +72,7 @@ export default apiInitializer((api) => {
             </span>
 
             <span class="tz-approval-post-badge__text">
-              {{#if (eq this.approvedById this.post.user_id)}}
+              {{#if this.approvedByAuthor}}
                 {{this.approvedByAuthorText}}
               {{else if this.approvedByUsername}}
                 {{this.approvedText}}
