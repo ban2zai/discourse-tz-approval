@@ -4,25 +4,35 @@
   --tz-approval-color: light-dark(#d9a441, #d9a441);
 }
 
-#topic-footer-buttons[data-tz-approval-layout] {
-  display: flex !important;
-  flex-direction: column !important;
-  flex-wrap: nowrap !important;
-  align-items: stretch !important;
-  justify-content: flex-start !important;
+#topic-footer-buttons {
+  &:has(> .tz-approval-footer-actions-row),
+  &:has(> span > .tz-approval-footer-actions-row) {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+  }
 
   > .topic-footer-main-buttons {
     width: 100% !important;
     flex: 0 0 auto !important;
     box-sizing: border-box;
+    order: 0;
   }
 
-  > .tz-approval-footer-actions-row {
+  > span:has(> .tz-approval-footer-actions-row) {
+    display: contents;
+  }
+
+  > .tz-approval-footer-actions-row,
+  > span > .tz-approval-footer-actions-row {
     display: flex;
     flex: 0 0 auto;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
+    order: 1;
     width: 100%;
     box-sizing: border-box;
     margin: 0;
@@ -34,11 +44,17 @@
       margin: 0 !important;
     }
   }
+
+  > .pinned-button,
+  > .topic-notifications-button,
+  > .topic-notifications-button > .reason {
+    order: 2;
+  }
 }
 
 @include viewport.until(sm) {
-  #topic-footer-buttons[data-tz-approval-layout]
-    > .tz-approval-footer-actions-row {
+  #topic-footer-buttons > .tz-approval-footer-actions-row,
+  #topic-footer-buttons > span > .tz-approval-footer-actions-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
 
