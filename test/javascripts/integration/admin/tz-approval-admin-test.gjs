@@ -25,15 +25,17 @@ module("Integration | Admin | tz-approval-admin", function (hooks) {
   test("submits the GUID flag and resets it in tag mode", async function (assert) {
     let submittedProfile;
 
+    this.server.get("/admin/plugins/tz-approval/profiles", () => ({
+      profiles: [PROFILE],
+      categories: [],
+      groups: [],
+      tags: [],
+    }));
+
     class TestableTzApprovalAdmin extends TzApprovalAdmin {
-      request(_url, options) {
+      request(url, options) {
         if (!options) {
-          return Promise.resolve({
-            profiles: [PROFILE],
-            categories: [],
-            groups: [],
-            tags: [],
-          });
+          return super.request(url);
         }
 
         submittedProfile = { ...options.data.profile };

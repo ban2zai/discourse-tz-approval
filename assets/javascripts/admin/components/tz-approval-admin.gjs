@@ -276,7 +276,7 @@ export default class TzApprovalAdmin extends Component {
     this.markDirty();
   }
 
-  request(url, options) {
+  request(url, options = {}) {
     return ajax(url, options);
   }
 
