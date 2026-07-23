@@ -15,6 +15,7 @@ RSpec.describe TzApproval::ProfileRecord do
     expect(profile.prefix).to eq("tz")
     expect(profile.label).to eq("ТЗ")
     expect(profile.binding_mode).to eq("category")
+    expect(profile.require_task_guid).to eq(false)
     expect(profile.author_locked_action_text).to eq(
       "%{username} запретил автору самостоятельно одобрять %{label}",
     )
@@ -49,6 +50,23 @@ RSpec.describe TzApproval::ProfileRecord do
     expect { TzApproval.backfill_default_profile_texts!(profile) }.not_to raise_error
   end
 
+  it "tolerates a missing task GUID column while migrations are booting" do
+    profile =
+      described_class.create!(
+        key: "line",
+        prefix: "line",
+        label: "Линия",
+        binding_mode: "category",
+        require_task_guid: true,
+      )
+    profile.stubs(:has_attribute?).returns(true)
+    profile.stubs(:has_attribute?).with(:require_task_guid).returns(false)
+
+    expect(profile.as_json[:require_task_guid]).to eq(false)
+    expect(profile.to_profile.require_task_guid).to eq(false)
+    expect { profile.send(:normalize_fields) }.not_to raise_error
+  end
+
   it "does not use the profile cache before author lock columns exist" do
     described_class.create!(key: "line", prefix: "line", label: "Линия")
     TzApproval.stubs(:profile_text_schema_current?).returns(false)
@@ -59,12 +77,14 @@ RSpec.describe TzApproval::ProfileRecord do
 
   it "filters unavailable columns when seeding the default profile" do
     available_columns =
-      described_class.column_names - %w[author_locked_action_text author_unlocked_action_text]
+      described_class.column_names -
+        %w[author_locked_action_text author_unlocked_action_text require_task_guid]
     described_class.stubs(:column_names).returns(available_columns)
     described_class
       .expects(:create!)
       .with do |attrs|
-        !attrs.key?(:author_locked_action_text) && !attrs.key?(:author_unlocked_action_text)
+        !attrs.key?(:author_locked_action_text) && !attrs.key?(:author_unlocked_action_text) &&
+          !attrs.key?(:require_task_guid)
       end
 
     TzApproval.ensure_default_profile!
@@ -154,6 +174,35 @@ RSpec.describe TzApproval::ProfileRecord do
     )
   end
 
+  it "exposes the task GUID requirement through JSON, profile structs, and cache" do
+    profile =
+      described_class.create!(
+        key: "line",
+        prefix: "line",
+        label: "Линия",
+        binding_mode: "category",
+        require_task_guid: true,
+      )
+
+    expect(profile.as_json[:require_task_guid]).to eq(true)
+    expect(profile.to_profile.require_task_guid).to eq(true)
+    expect(TzApproval.all_profile_for_key("line").require_task_guid).to eq(true)
+  end
+
+  it "forces the task GUID requirement off for tag profiles" do
+    profile =
+      described_class.create!(
+        key: "line",
+        prefix: "line",
+        label: "Линия",
+        binding_mode: "tag",
+        require_task_guid: true,
+      )
+
+    expect(profile.require_task_guid).to eq(false)
+    expect(profile.as_json[:require_task_guid]).to eq(false)
+  end
+
   it "validates key and prefix format" do
     profile = described_class.new(key: "bad-prefix!", prefix: "bad-prefix!", label: "Bad")
 
@@ -223,5 +272,31 @@ RSpec.describe TzApproval::ProfileRecord do
     topic = Struct.new(:tags).new([tag])
 
     expect(TzApproval.topic_applicable_for_profile?(topic, profile)).to eq(true)
+  end
+
+  it "selects only the first effective profile for final category and tags" do
+    tag_profile =
+      described_class.create!(
+        key: "tag_first",
+        prefix: "tag_first",
+        label: "Тег раньше",
+        priority: 10,
+        binding_mode: "tag",
+        tags: ["important"],
+      )
+    described_class.create!(
+      key: "category_second",
+      prefix: "category_second",
+      label: "Категория позже",
+      priority: 20,
+      binding_mode: "category",
+      category_ids: [42],
+      require_task_guid: true,
+    )
+
+    effective = TzApproval.applicable_profile_for(category_id: 42, tag_names: ["important"])
+
+    expect(effective.id).to eq(tag_profile.id)
+    expect(effective.require_task_guid).to eq(false)
   end
 end

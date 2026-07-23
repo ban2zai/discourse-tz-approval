@@ -19,6 +19,7 @@ RSpec.describe TzApproval::Admin::ProfilesController do
       enabled: true,
       priority: 200,
       binding_mode: "category",
+      require_task_guid: true,
       icon: "clipboard-check",
       category_ids: [category.id],
       allowed_group_ids: [group.id],
@@ -62,6 +63,7 @@ RSpec.describe TzApproval::Admin::ProfilesController do
     post "/admin/plugins/tz-approval/profiles.json", params: { profile: valid_profile_params }
     expect(response.status).to eq(200)
     expect(response.parsed_body["profile"]).to include(
+      "require_task_guid" => true,
       "author_locked_action_text" => "%{username} запретил самоодобрение второй линии",
       "author_unlocked_action_text" => "%{username} разрешил самоодобрение второй линии",
     )
@@ -79,11 +81,28 @@ RSpec.describe TzApproval::Admin::ProfilesController do
     expect(response.parsed_body["profile"]["author_locked_action_text"]).to eq(
       "%{username} запретил самоодобрение второй линии",
     )
+    expect(response.parsed_body["profile"]["require_task_guid"]).to eq(true)
 
     delete "/admin/plugins/tz-approval/profiles/#{profile_id}.json"
 
     expect(response.status).to eq(200)
     expect(TzApproval::ProfileRecord.exists?(profile_id)).to eq(false)
+  end
+
+  it "forces the task GUID requirement off for tag profiles" do
+    sign_in(admin)
+
+    post "/admin/plugins/tz-approval/profiles.json", params: { profile: valid_profile_params }
+    profile_id = response.parsed_body["profile"]["id"]
+
+    put "/admin/plugins/tz-approval/profiles/#{profile_id}.json",
+        params: {
+          profile: valid_profile_params.merge(binding_mode: "tag", require_task_guid: true),
+        }
+
+    expect(response.status).to eq(200)
+    expect(response.parsed_body["profile"]["require_task_guid"]).to eq(false)
+    expect(TzApproval::ProfileRecord.find(profile_id).require_task_guid).to eq(false)
   end
 
   it "does not delete the default TZ profile" do

@@ -7,6 +7,8 @@ en:
     tz_approval_status_token: "Server-to-server approval status endpoint token. Use a URL-safe value without '/'. Example: /approvals/topic-id/123/<token>"
   tz_approval:
     topic_author: "Topic author"
+    errors:
+      task_guid_required: "This topic is not linked to a task. Topics can only be created in this category from SZ."
     notification:
       title: "Approval status changed"
       approved_notification: "%{display_username} changed the approval status"
@@ -51,6 +53,8 @@ en:
       search_categories: "Find a category..."
       search_groups: "Find a group..."
       search_tags: "Find a tag..."
+      require_task_guid_help: "Prevents topics from being created or moved into this profile's categories without a verified task link."
+      require_task_guid_tag_help: "The GUID requirement is only available for profiles bound to categories."
       sections:
         main: "Main"
         binding: "Binding and permissions"
@@ -64,6 +68,7 @@ en:
         enabled: "Profile enabled"
         priority: "Priority"
         binding_mode: "Binding mode"
+        require_task_guid: "Require task GUID"
         icon: "Icon"
         tags: "Tags"
         categories: "Categories"

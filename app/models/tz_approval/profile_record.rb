@@ -51,6 +51,9 @@ module TzApproval
         icon: icon,
         enabled: SiteSetting.tz_approval_enabled && enabled,
         binding_mode: binding_mode,
+        require_task_guid:
+          binding_mode == TzApproval::CATEGORY_BINDING_MODE &&
+            optional_attribute(:require_task_guid) == true,
         tags: tags,
         status_slug: status_slug,
         approve_text: approve_text,
@@ -76,6 +79,9 @@ module TzApproval
         enabled: enabled,
         priority: priority,
         binding_mode: binding_mode,
+        require_task_guid:
+          binding_mode == TzApproval::CATEGORY_BINDING_MODE &&
+            optional_attribute(:require_task_guid) == true,
         icon: icon,
         category_ids: category_ids,
         allowed_group_ids: allowed_group_ids,
@@ -104,6 +110,7 @@ module TzApproval
       self.binding_mode = binding_mode.to_s.strip
       self.icon = icon.to_s.strip
       self.priority = priority.to_i
+      self[:require_task_guid] = false if has_attribute?(:require_task_guid) && binding_mode != "category"
       JSON_ARRAY_COLUMNS.each { |column| public_send("#{column}=", public_send(column)) }
     end
 

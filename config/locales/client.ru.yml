@@ -58,6 +58,8 @@ ru:
         search_categories: "Найти категорию..."
         search_groups: "Найти группу..."
         search_tags: "Найти тег..."
+        require_task_guid_help: "Запрещает создание и перенос тем в категории профиля без подтвержденной связи с задачей."
+        require_task_guid_tag_help: "Требование GUID доступно только для профилей с привязкой по категориям."
         sections:
           main: "Основное"
           binding: "Привязка и права"
@@ -71,6 +73,7 @@ ru:
           enabled: "Профиль включен"
           priority: "Приоритет"
           binding_mode: "Режим привязки"
+          require_task_guid: "Требовать GUID задачи"
           icon: "Иконка"
           tags: "Теги"
           categories: "Категории"

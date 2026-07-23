@@ -41,6 +41,7 @@ module ::TzApproval
     author_locked_action_text
     author_unlocked_action_text
   ].freeze
+  PROFILE_CACHE_SCHEMA_FIELDS = (AUTHOR_LOCK_PROFILE_TEXT_FIELDS + %i[require_task_guid]).freeze
   DEFAULT_PROFILE_TEXT_FIELDS = %i[
     label
     approve_text
@@ -94,6 +95,7 @@ module ::TzApproval
       :icon,
       :enabled,
       :binding_mode,
+      :require_task_guid,
       :tags,
       :status_slug,
       :approve_text,
@@ -145,7 +147,7 @@ module ::TzApproval
 
   def self.profile_text_schema_current?
     available_columns = ProfileRecord.column_names
-    AUTHOR_LOCK_PROFILE_TEXT_FIELDS.all? { |field| available_columns.include?(field.to_s) }
+    PROFILE_CACHE_SCHEMA_FIELDS.all? { |field| available_columns.include?(field.to_s) }
   end
 
   def self.profile_from_cache_attributes(attrs)
@@ -162,6 +164,8 @@ module ::TzApproval
       icon: attrs[:icon],
       enabled: SiteSetting.tz_approval_enabled && attrs[:enabled],
       binding_mode: attrs[:binding_mode],
+      require_task_guid:
+        attrs[:binding_mode] == CATEGORY_BINDING_MODE && attrs[:require_task_guid] == true,
       tags: Array(attrs[:tags]),
       status_slug: attrs[:prefix].to_s.tr("_", "-"),
       approve_text: attrs[:approve_text],
@@ -186,6 +190,7 @@ module ::TzApproval
       enabled: true,
       priority: 100,
       binding_mode: SiteSetting.tz_approval_binding_mode.presence || TAG_BINDING_MODE,
+      require_task_guid: false,
       icon: safe_icon(SiteSetting.tz_approval_icon, "file-signature"),
       category_ids: SiteSetting.tz_approval_categories_map,
       allowed_group_ids: SiteSetting.tz_approval_allowed_groups_map,
@@ -207,6 +212,7 @@ module ::TzApproval
       icon: attrs[:icon],
       enabled: SiteSetting.tz_approval_enabled,
       binding_mode: attrs[:binding_mode],
+      require_task_guid: false,
       tags: attrs[:tags],
       status_slug: attrs[:prefix].tr("_", "-"),
       approve_text: attrs[:approve_text],
@@ -317,18 +323,34 @@ module ::TzApproval
     profile.categories.map(&:to_i).include?(topic.category_id)
   end
 
-  def self.topic_applicable_for_profile?(topic, profile)
+  def self.profile_applicable_for_values?(profile, category_id:, tag_names:)
     return false unless profile&.enabled
 
     if profile.binding_mode == CATEGORY_BINDING_MODE
-      topic_in_approval_category?(topic, profile)
+      Array(profile.categories).map(&:to_i).include?(category_id.to_i)
     else
-      topic_has_approval_tag?(topic, profile)
+      (Array(tag_names).map(&:to_s) & Array(profile.tags).map(&:to_s)).present?
     end
   end
 
+  def self.applicable_profile_for(category_id:, tag_names:)
+    profiles.find do |profile|
+      profile_applicable_for_values?(profile, category_id: category_id, tag_names: tag_names)
+    end
+  end
+
+  def self.topic_applicable_for_profile?(topic, profile)
+    category_id = topic.category_id if topic.respond_to?(:category_id)
+
+    profile_applicable_for_values?(
+      profile,
+      category_id: category_id,
+      tag_names: topic_tag_names(topic),
+    )
+  end
+
   def self.topic_applicable_profile(topic)
-    profiles.find { |profile| topic_applicable_for_profile?(topic, profile) }
+    applicable_profile_for(category_id: topic.category_id, tag_names: topic_tag_names(topic))
   end
 
   def self.topic_applicable?(topic)
@@ -696,6 +718,7 @@ after_initialize do
   require_relative "app/controllers/tz_approval/approvals_controller"
   require_relative "app/controllers/tz_approval/status_controller"
   require_relative "app/controllers/tz_approval/admin/profiles_controller"
+  require_relative "app/services/tz_approval/task_guid_requirement"
 
   existing_notification_type =
     Notification.types.find do |name, id|
@@ -710,6 +733,127 @@ after_initialize do
 
   Notification.types[:tz_approval] = TzApproval::NOTIFICATION_TYPE_ID
   TzApproval.ensure_default_profile_safely!
+
+  # ── Требование связи с задачей ───────────────────────────────────────────────
+  on(:after_validate_topic) do |topic, topic_creator|
+    next if topic.errors.present?
+    next if topic.private_message?
+    next if topic_creator.opts[:skip_validations]
+
+    allowed =
+      TzApproval::TaskGuidRequirement.creation_allowed?(
+        user: topic_creator.user,
+        category_id: topic.category_id,
+        tag_inputs: topic_creator.opts[:tags],
+        opts: topic_creator.opts,
+      )
+
+    topic.errors.add(:base, TzApproval::TaskGuidRequirement.error_message) unless allowed
+  end
+
+  module TzApproval::PostRevisorTaskGuidExtensions
+    def revise!(editor, fields, opts = {})
+      normalized_fields = fields.with_indifferent_access
+      category_changes =
+        normalized_fields.key?(:category_id) &&
+          normalized_fields[:category_id].to_i != @topic.category_id.to_i
+      skip_validations = opts[:skip_validations] || opts["skip_validations"]
+
+      return super unless category_changes
+
+      tag_inputs =
+        if normalized_fields.key?(:tags)
+          normalized_fields[:tags]
+        else
+          TzApproval.topic_tag_names(@topic)
+        end
+
+      if skip_validations
+        return TzApproval::TaskGuidRequirement.with_revision_context(
+          @topic,
+          user: editor,
+          tag_inputs: tag_inputs,
+          skip_validations: true,
+        ) { super }
+      end
+
+      allowed =
+        TzApproval::TaskGuidRequirement.category_change_allowed?(
+          topic: @topic,
+          user: editor,
+          category_id: normalized_fields[:category_id],
+          tag_inputs: tag_inputs,
+        )
+
+      unless allowed
+        message = TzApproval::TaskGuidRequirement.error_message
+        @post.errors.add(:base, message)
+        @topic.errors.add(:base, message)
+        return false
+      end
+
+      TzApproval::TaskGuidRequirement.with_revision_context(
+        @topic,
+        user: editor,
+        tag_inputs: tag_inputs,
+        skip_validations: false,
+      ) { super }
+    end
+  end
+
+  module TzApproval::TopicTaskGuidExtensions
+    def change_category_to_id(category_id, *args, **kwargs, &block)
+      context = TzApproval::TaskGuidRequirement.revision_context(self) || {}
+      return super if context[:skip_validations]
+
+      user =
+        context[:user] ||
+          (acting_user if respond_to?(:acting_user)) ||
+          TzApproval::TaskGuidRequirement.category_change_user
+      tag_inputs =
+        if context.key?(:tag_inputs)
+          context[:tag_inputs]
+        else
+          TzApproval.topic_tag_names(self)
+        end
+
+      allowed =
+        TzApproval::TaskGuidRequirement.category_change_allowed?(
+          topic: self,
+          user: user,
+          category_id: category_id,
+          tag_inputs: tag_inputs,
+        )
+
+      unless allowed
+        errors.add(:base, TzApproval::TaskGuidRequirement.error_message)
+        return false
+      end
+
+      super
+    end
+  end
+
+  module TzApproval::TopicsBulkActionTaskGuidExtensions
+    def perform!(*args, **kwargs, &block)
+      operation_type =
+        if @operation.respond_to?(:[])
+          @operation[:type] || @operation["type"]
+        end
+
+      return super unless operation_type.to_s == "change_category"
+
+      TzApproval::TaskGuidRequirement.with_category_change_user(@user) { super }
+    end
+  end
+
+  reloadable_patch do
+    ::PostRevisor.prepend(TzApproval::PostRevisorTaskGuidExtensions)
+    ::Topic.prepend(TzApproval::TopicTaskGuidExtensions)
+    if defined?(::TopicsBulkAction)
+      ::TopicsBulkAction.prepend(TzApproval::TopicsBulkActionTaskGuidExtensions)
+    end
+  end
 
   # ── Custom fields ────────────────────────────────────────────────────────────
   TzApproval.all_profiles.each do |profile|

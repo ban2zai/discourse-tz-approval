@@ -25,6 +25,7 @@ const DEFAULT_PROFILE = {
   enabled: true,
   priority: 100,
   binding_mode: "category",
+  require_task_guid: false,
   icon: "file-signature",
   category_ids: [],
   allowed_group_ids: [],
@@ -43,13 +44,19 @@ const DEFAULT_PROFILE = {
 };
 
 function cloneProfile(profile = DEFAULT_PROFILE) {
-  return {
+  const cloned = {
     ...DEFAULT_PROFILE,
     ...profile,
     category_ids: [...(profile.category_ids || [])].map((id) => Number(id)),
     allowed_group_ids: [...(profile.allowed_group_ids || [])].map((id) => Number(id)),
     tags: [...(profile.tags || [])],
   };
+
+  if (cloned.binding_mode !== "category") {
+    cloned.require_task_guid = false;
+  }
+
+  return cloned;
 }
 
 export default class TzApprovalAdmin extends Component {
@@ -164,6 +171,16 @@ export default class TzApprovalAdmin extends Component {
     return i18n(`tz_approval.admin.binding_modes.${this.draft.binding_mode}`);
   }
 
+  get taskGuidRequirementDisabled() {
+    return this.draft.binding_mode !== "category";
+  }
+
+  get taskGuidRequirementHelpKey() {
+    return this.taskGuidRequirementDisabled
+      ? "tz_approval.admin.require_task_guid_tag_help"
+      : "tz_approval.admin.require_task_guid_help";
+  }
+
   filterOptions(options, search) {
     const query = search.trim().toLowerCase();
     return query
@@ -205,7 +222,7 @@ export default class TzApprovalAdmin extends Component {
     this.loadError = null;
 
     try {
-      this.applyPayload(await ajax("/admin/plugins/tz-approval/profiles"));
+      this.applyPayload(await this.request("/admin/plugins/tz-approval/profiles"));
     } catch {
       this.loadError = i18n("tz_approval.admin.load_error");
     } finally {
@@ -249,8 +266,18 @@ export default class TzApprovalAdmin extends Component {
   updateField(field, event) {
     const value =
       event.target.type === "checkbox" ? event.target.checked : event.target.value;
-    this.draft = { ...this.draft, [field]: value };
+    const changes = { [field]: value };
+
+    if (field === "binding_mode" && value !== "category") {
+      changes.require_task_guid = false;
+    }
+
+    this.draft = { ...this.draft, ...changes };
     this.markDirty();
+  }
+
+  request(url, options) {
+    return ajax(url, options);
   }
 
   @action
@@ -305,7 +332,10 @@ export default class TzApprovalAdmin extends Component {
         ? `/admin/plugins/tz-approval/profiles/${this.draft.id}`
         : "/admin/plugins/tz-approval/profiles";
       const type = this.isExistingProfile ? "PUT" : "POST";
-      const data = await ajax(url, { type, data: { profile: this.draft } });
+      const data = await this.request(url, {
+        type,
+        data: { profile: this.draft },
+      });
 
       const saved = data.profile;
       const existingIndex = this.profiles.findIndex((profile) => profile.id === saved.id);
@@ -353,7 +383,7 @@ export default class TzApprovalAdmin extends Component {
     this.saveMessage = null;
 
     try {
-      await ajax(`/admin/plugins/tz-approval/profiles/${this.draft.id}`, {
+      await this.request(`/admin/plugins/tz-approval/profiles/${this.draft.id}`, {
         type: "DELETE",
       });
 
@@ -469,6 +499,7 @@ export default class TzApprovalAdmin extends Component {
                 <label>
                   <span>{{i18n "tz_approval.admin.fields.binding_mode"}}</span>
                   <select
+                    data-binding-mode
                     value={{this.draft.binding_mode}}
                     {{on "change" (fn this.updateField "binding_mode")}}
                   >
@@ -498,6 +529,20 @@ export default class TzApprovalAdmin extends Component {
               <div class="tz-approval-admin__section-head">
                 <h3>{{i18n "tz_approval.admin.sections.binding"}}</h3>
                 <span class="tz-approval-admin__mode">{{this.bindingModeLabel}}</span>
+              </div>
+
+              <div class="tz-approval-admin__guid-requirement">
+                <label class="tz-approval-admin__switch">
+                  <input
+                    type="checkbox"
+                    data-require-task-guid
+                    checked={{this.draft.require_task_guid}}
+                    disabled={{this.taskGuidRequirementDisabled}}
+                    {{on "change" (fn this.updateField "require_task_guid")}}
+                  />
+                  <span>{{i18n "tz_approval.admin.fields.require_task_guid"}}</span>
+                </label>
+                <p>{{i18n this.taskGuidRequirementHelpKey}}</p>
               </div>
 
               <div class="tz-approval-admin__selectors">

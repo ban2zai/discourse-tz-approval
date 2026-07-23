@@ -74,6 +74,7 @@ module TzApproval
             :enabled,
             :priority,
             :binding_mode,
+            :require_task_guid,
             :icon,
             :approve_text,
             :unapprove_text,
